@@ -55,6 +55,11 @@
     td code{white-space:nowrap}
     .warnbox{border:1px solid rgba(255,210,77,.4);background:rgba(255,210,77,.07);border-radius:12px;padding:14px 18px;margin:15px 0;color:var(--warn);font-size:.92rem}
     .dangerbox{border:1px solid rgba(255,92,122,.45);background:rgba(255,92,122,.07);border-radius:12px;padding:14px 18px;margin:15px 0;color:var(--bad);font-size:.92rem;line-height:1.65}
+    .tag{display:inline-block;font-size:.62rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+         padding:2px 8px;border-radius:20px;margin-left:8px;vertical-align:2px;
+         background:rgba(108,140,255,.15);color:var(--accent);border:1px solid rgba(108,140,255,.3)}
+    .c{color:#8b93a7}   /* comentario en bloques de código */
+    .o{color:#5be49b}   /* salida destacada */
     .tipbox{border:1px solid rgba(91,228,155,.4);background:rgba(91,228,155,.06);border-radius:12px;padding:14px 18px;margin:15px 0;color:var(--good);font-size:.92rem}
     .pill{display:inline-block;padding:2px 10px;border-radius:999px;font-size:.72rem;font-weight:750;margin-left:6px}
     .pill.yes{background:rgba(91,228,155,.14);color:var(--good)}
@@ -96,6 +101,7 @@
       <a href="#rollout">rollout</a>
       <a href="#spooftest">spooftest</a>
       <a href="#compose">compose (campos libres)</a>
+      <a href="#swaks">envío real (swaks)</a>
       <a href="#drill">drill (envío real)</a>
       <a href="#imap">IMAP: ¿llegó?</a>
       <a href="#selftest">selftest</a>
@@ -109,6 +115,8 @@
       <a href="#web-harden">Hardening</a>
       <div class="grp">Avanzado</div>
       <a href="#api">API local</a>
+      <a href="#internos">Arquitectura interna</a>
+      <a href="#glosario">Glosario</a>
       <a href="#config">Configuración</a>
       <a href="#troubleshooting">Solución de problemas</a>
       <a href="#recetas">Recetas completas</a>
@@ -117,7 +125,7 @@
 
     <main class="docs">
       <h1>📚 Manual exhaustivo de MailForge</h1>
-      <p class="meta">v1.2.0 · aplicable a CLI + consola local · todos los ejemplos usan <b>datos 100% ficticios</b></p>
+      <p class="meta">v1.3.0 · aplicable a CLI + consola local · todos los ejemplos usan <b>datos 100% ficticios</b></p>
 
       <h2 id="convenciones">Convenciones y datos ficticios</h2>
       <p>En TODOS los ejemplos de este manual usamos estos datos inventados. Sustitúyelos por los tuyos al probar:</p>
@@ -299,61 +307,190 @@ motivo ∈ invoice | password | giftcard   (por defecto: invoice)</pre>
 ╰──────────────────────────────────────────────────────────────╯</span></pre>
       <div class="tipbox">💡 <code>spooftest</code> vs <code>drill</code>: <code>spooftest</code> es la <b>predicción</b> (0 riesgo, 0 paquetes SMTP); <code>drill</code> es la <b>ejecución real</b> (1 email de verdad hacia TU buzón). Us spooftest primero para decidir, y drill para confirmarlo empíricamente.</div>
 
-      <h2 id="compose">🧾 <code>compose</code> — compositor libre (estilo emkei.cz)</h2>
-      <p>Genera el mensaje <b>exacto</b> que definirás campo a campo —From Name, From E-mail, To, Subject, Text, Reply-To, prioridad y <b>adjuntos reales</b>— y produce el <code>.eml</code> listo + los comandos de inyección para TU destinatario (propio o temporal, p. ej. un buzón desechable de prueba). Antes de usarlo, la herramienta muestra el <b>aviso de entorno controlado</b>; el envío automatizado por el motor sigue reservado a buzones del dominio propio.</p>
+      <h2 id="compose">🧾 <code>compose</code> — compositor libre, parámetro a parámetro</h2>
+      <p>Este comando construye el mensaje <b>exacto</b> que defines campo a campo, te lo muestra como <code>.eml</code>, te genera los comandos para inyectarlo tú… y con <code>--send</code> <b>lo envía de verdad</b> ejecutando swaks por detrás. Pensado para que cualquiera pueda usarlo: cada parámetro está explicado abajo con ejemplos simples y avanzados.</p>
 
-      <h4>Sintaxis</h4>
+      <h4>Sintaxis completa</h4>
       <pre>python3 mailforge.py compose \
     --from-name "&lt;NOMBRE VISIBLE&gt;" \
     --from-email "&lt;EMAIL DE ENVÍO&gt;" \
     --to "&lt;EMAIL DESTINATARIO&gt;" \
     --subject "&lt;ASUNTO&gt;" \
     --text "&lt;CUERPO/DESCRIPCIÓN&gt;" \
-  [ --reply-to "&lt;reply@ajeno.com&gt;" ]      # cabecera Reply-To distinta
+  [ --reply-to "&lt;reply@ajeno.com&gt;" ]            # cabecera Reply-To distinta
   [ --attach fichero1.pdf --attach foto.png ]   # adjuntos reales (máx 10)
-  [ --priority high|normal|low ]         # X-Priority 1 / 3 / 5
-  [ --relay smtp.turelay.com ]           # host que aparecerá en los comandos
-  [ --save drill.eml ]                   # además, guarda el .eml en disco</pre>
+  [ --priority high|normal|low ]                # X-Priority 1 / 3 / 5
+  [ --relay smtp.turelay.com --port 25|587 ]    # servidor de salida
+  [ --smtp-user usuario ]                       # login del relay (pass por env)
+  [ --no-tls | --tls-optional | --tls-only ]    # cifrado del canal
+  [ --save drill.eml ]                          # guarda el .eml en disco
+  [ --send ]                                    # ENVÍO REAL vía swaks</pre>
 
-      <h4>Ejemplo de prueba (datos ficticios)</h4>
+      <h3>📌 Referencia de cada parámetro</h3>
+
+      <h4><code>--from-name</code> · nombre visible</h4>
+      <p><b>Qué es (nivel cero):</b> el nombre que el destinatario ve como remitente en su bandeja, antes de abrir el correo. Es cosmético: no participa en la autenticación. <b>Por detrás:</b> se codifica con RFC 2047 (<code>=?utf-8?q?…=</code>) para soportar acentos; la librería <code>email</code> de Python (<code>EmailMessage</code> + <code>formataddr</code>) construye el mensaje. Si lo omites, se usa la propia dirección como nombre.</p>
+      <pre><span class="c"># simple:</span>
+--from-name "Carlos"
+<span class="c"># avanzado (acentos y cargo — codificado automáticamente):</span>
+--from-name "CE0 Carlos Pérez (Dirección Financiera)"</pre>
+
+      <h4><code>--from-email</code> · dirección de envío <span class="tag">obligatorio</span></h4>
+      <p><b>Qué es:</b> la dirección del cabecero <code>From:</code> — la que el receptor evalúa contra DMARC y cuyo dominio es el "suplantado". <b>Por detrás:</b> define el dominio del <code>Message-ID</code> y del saludo EHLO; DMARC compara este dominio con el del sobre SMTP y con el firmado por DKIM (alineación). Un dominio sin MX hará fallar el envío.</p>
+      <pre><span class="c"># simple:</span>
+--from-email jefe@midominio.com
+<span class="c"># avanzado — prueba de suplantación por subdominio (decide el sp= de DMARC):</span>
+--from-email soporte@sub.midominio.com</pre>
+
+      <h4><code>--to</code> · destinatario <span class="tag">obligatorio</span></h4>
+      <p><b>Qué es:</b> el buzón que recibe el mensaje — <b>debe ser tuyo o con consentimiento</b>: tu buzón corporativo, un alias propio o un temporal de prueba (Guerrilla Mail). <b>Por detrás:</b> al enviar, MailForge resuelve los registros <b>MX</b> del dominio del destinatario con su stack DNS (UDP→TCP→DoH) para saber a qué servidor entregar; también puedes fijarlo con <code>--relay</code>.</p>
+      <pre><span class="c"># simple:</span>
+--to test@midominio.com
+<span class="c"># avanzado — buzón temporal con etiqueta +tag (drill desechable):</span>
+--to yvt0wp+77xiollatz23c@sharklasers.com</pre>
+
+      <h4><code>--subject</code> · asunto</h4>
+      <p><b>Qué es:</b> la línea de asunto — donde vive la ingeniería social de un ataque real ("URGENTE", "Factura vencida"…). <b>Por detrás:</b> recortado a 998 caracteres (RFC 5322) y codificado RFC 2047 si lleva acentos.</p>
+      <pre><span class="c"># simple:</span> --subject "Hola"
+<span class="c"># avanzado (encadenado realista de respuestas):</span>
+--subject "RE: RE: FW: Factura #4471 — pago pendiente"</pre>
+
+      <h4><code>--text</code> · cuerpo</h4>
+      <p><b>Qué es:</b> el contenido del correo. <b>Por detrás:</b> parte MIME <code>text/plain; charset=utf-8</code> con <code>Content-Transfer-Encoding: base64</code> (los acentos sobreviven a cualquier servidor). Máx. 100.000 caracteres.</p>
+      <pre><span class="c"># simple:</span> --text "Hola, esto es una prueba."
+<span class="c"># avanzado (cuerpo multilínea desde un fichero):</span>
+--text "$(cat cuerpo.txt)"</pre>
+
+      <h4><code>--reply-to</code> · dirección de respuesta <span class="tag">opcional</span></h4>
+      <p><b>Qué es:</b> cabecera <code>Reply-To:</code> — al pulsar "Responder", la respuesta va AQUÍ y no al From. Técnica real de ataque: From suplantado + Reply-To ajeno. Si tu pasarela no alerta de esto, es un hallazgo.</p>
+      <pre><span class="c"># avanzado (técnica de robo de respuestas):</span>
+--reply-to recogida@otro-correo.com</pre>
+
+      <h4><code>--attach</code> · adjuntos <span class="tag">opcional · repetible · máx 10</span></h4>
+      <p><b>Qué es:</b> ficheros que viajan dentro del correo (PDF, PNG, ZIP…). <b>Por detrás:</b> cada uno se embebe como parte MIME con <code>Content-Disposition: attachment; filename="…"</code> y su MIME type autodetectado, convirtiendo el mensaje en <code>multipart/mixed</code>. En la web se suben en base64 (límite ~6 MB total). Un adjunto corrupto se omite con warning sin romper el mensaje.</p>
+      <pre><span class="c"># simple:</span> --attach factura.pdf
+<span class="c"># avanzado (tres partes en un mensaje):</span>
+--attach factura.pdf --attach logo.png --attach datos.csv</pre>
+
+      <h4><code>--priority</code> · urgencia <span class="tag">opcional</span></h4>
+      <p><b>Qué es:</b> marca el correo como urgente (muchos clientes lo resaltan). <b>Por detrás:</b> <code>high</code> → <code>X-Priority: 1</code> + <code>Importance: High</code>; <code>low</code> → <code>X-Priority: 5</code>; <code>normal</code> no añade nada.</p>
+
+      <h4><code>--relay</code>, <code>--port</code>, <code>--smtp-user</code> · servidor de salida <span class="tag">opcional</span></h4>
+      <p><b>Qué es:</b> a qué SMTP se conecta MailForge. Sin <code>--relay</code> entrega <b>directamente al MX del destinatario</b> (como un atacante real). <b>¿Cuándo usar relay?</b> Cuando tu red doméstica/cloud bloquea el puerto 25 saliente (lo habitual) o para enviar desde tu infraestructura autorizada.</p>
+      <pre>--relay smtp.midominio.com --port 587 --smtp-user drill@midominio.com
+<span class="c"># la contraseña va por variable de entorno (nunca en el historial):</span>
+export MAILFORGE_SMTP_PASS="tu-clave"</pre>
+
+      <h4><code>--no-tls</code> / <code>--tls-optional</code> / <code>--tls-only</code> · cifrado <span class="tag">opcional</span></h4>
+      <p><b>Por detrás:</b> <code>tls</code> (por defecto) → swaks <code>-tls</code> (STARTTLS oportunista, como un emisor real); <code>tls-optional</code> → continúa aunque no haya TLS; <code>tls-only</code> → aborta si no hay TLS; <code>no-tls</code> → texto claro.</p>
+
+      <h4><code>--save</code> y <code>--send</code></h4>
+      <p><code>--save drill.eml</code> escribe el mensaje exacto a disco. <code>--send</code> lo <b>envía de verdad</b> (ver sección siguiente).</p>
+
+      <h4>Ejemplo completo (datos ficticios)</h4>
       <pre>$ python3 mailforge.py compose \
     --from-name "CE0 Carlos Pérez" \
-    --from-email jefe@diseo.pntr.dev \
-    --to yvt0wp+77xiollatz23c@sharklasers.com \
+    --from-email jefe@midominio.com \
+    --to test@midominio.com \
     --subject "URGENTE: Factura #4471 vencida" \
-    --text "Adjunto la factura pendiente de abono. Ruego su pago hoy mismo." \
-    --reply-to contabilidad@otro-correo.com \
+    --text "Adjunto la factura pendiente de abono." \
     --attach factura_4471.pdf --priority high \
-    --save drill.eml
+    --save drill.eml --send
 
   ⚠ USO EN ENTORNO CONTROLADO: dirige este mensaje solo a buzones propios
     o con consentimiento explícito (simulacros de phishing autorizados).
 
 ╭ ✉️ Mensaje .eml exacto ═══════════════════════════════════════╮
-│ From: =?utf-8?q?CE0_Carlos_P=C3=A9rez?= &lt;jefe@diseo.pntr.dev&gt;   │
-│ To: yvt0wp+77xiollatz23c@sharklasers.com                      │
-│ Subject: URGENTE: Factura #4471 vencida                       │
-│ Reply-To: contabilidad@otro-correo.com                        │
-│ X-Priority: 1 · Importance: High                              │
-│ Content-Type: multipart/mixed  ← cuerpo + 1 adjunto real      │
+│ From: =?utf-8?q?CE0_Carlos_P=C3=A9rez?= &lt;jefe@midominio.com&gt;      │
+│ To: test@midominio.com                                       │
+│ Subject: URGENTE: Factura #4471 vencida                      │
+│ X-Priority: 1 · Importance: High                             │
+│ Content-Type: multipart/mixed  ← cuerpo + 1 adjunto real     │
 ╰═══════════════════════════════════════════════════════════════╝
-  💾 Guardado: drill.eml  ·  📎 adjuntos embebidos: 1
+  💾 Guardado: drill.eml
+  ¿Enviar de verdad este mensaje por SMTP? [y/N]: y
+  … (ver sección siguiente)</pre>
 
-╭ Comandos de inyección (los ejecutas TÚ) ══════════════════════╮
-│ swaks --to 'yvt0wp+77xiollatz23c@sharklasers.com' \            │
-│       --from 'jefe@diseo.pntr.dev' \                           │
-│       --h-From: 'CE0 Carlos Pérez &lt;jefe@diseo.pntr.dev&gt;' \     │
-│       --attach @factura_4471.pdf --h-X-Priority: '1 (Highest)' …  │
-│   — o —  sendmail -t &lt; drill.eml                               │
-╰═══════════════════════════════════════════════════════════════╝</pre>
+      <h2 id="swaks">🚀 Envío real — cómo la herramienta envía por ti (swaks por detrás)</h2>
+      <p>Con <code>--send</code> (CLI) o el botón <b>“✉ Enviar AHORA (real, vía swaks)”</b> del Spoof Lab, MailForge <b>ejecuta el envío por ti</b>: tú solo rellenas los campos. Así funciona exactamente lo que ocurre por detrás:</p>
 
-      <h4>Notas</h4>
-      <ul class="list">
-        <li>El <b>nombre visible</b> se codifica RFC 2047 (acentos OK) y la <b>dirección</b> queda intacta — idéntico a como lo hacen los clientes reales.</li>
-        <li>Los adjuntos se embeben como partes <code>multipart/mixed</code> reales (base64); el comando swaks usa <code>--attach @fichero</code> para el binario original.</li>
-        <li>Si un adjunto no es base64 válido se omite con un warning — nunca rompe el mensaje.</li>
-        <li>En la <b>consola web</b> (Spoof Lab) todo esto es un formulario: casillas de ficheros, lista visual de adjuntos, “Attach another file”, descarga del <code>.eml</code> y envío automatizado cuando destinatario y dominio del From coinciden.</li>
-      </ul>
+      <ol class="steps">
+        <li><b>Composición</b> — <code>compose_spoof_email()</code> construye tu mensaje RFC 5322 exacto (cabeceras, MIME, adjuntos) y lo escribe en un fichero temporal con permisos <code>0600</code>.</li>
+        <li><b>Resolución del destino</b> — consulta DNS (UDP→TCP→DoH) los registros <b>MX</b> del dominio del destinatario; si fijaste <code>--relay</code>, usa el tuyo.</li>
+        <li><b>Ejecución de swaks</b> — invoca el binario con una lista de argumentos (nunca shell → imposible inyectar comandos): <code>swaks --to … --from … --ehlo … --server &lt;MX&gt; --port 25 -tls --data @/tmp/mf-drill-*.eml</code>. El <code>--data @fichero</code> entrega tu .eml <b>byte a byte</b>.</li>
+        <li><b>Transcripción y veredicto</b> — el parser lee la conversación SMTP (<code>&lt;~</code> respuestas, <code>**</code> errores) y el código de fin-de-DATA decide: <span style="color:var(--warn)">250 → ✅ ACEPTADO</span> · <span style="color:var(--good)">5xx → ⛔ RECHAZADO</span> · 4xx → ⚠ transitorio. Todo se muestra en pantalla.</li>
+        <li><b>Limpieza</b> — el .eml temporal se borra siempre, incluso si hay error.</li>
+      </ol>
+
+      <h4>Flujo completo</h4>
+      <pre>   TÚ (compose --send / botón web "Enviar AHORA")
+        │  from-name, from-email, to, subject, text, adjuntos…
+        ▼
+   MailForge core (Python)
+        │  1. compose_spoof_email() → .eml exacto (tmp, 0600)
+        │  2. DNS: MX del destinatario (p.ej. mail.guerrillamail.com)
+        │  3. subprocess SIN shell:
+        │       swaks --to &lt;dest&gt; --from &lt;remitente&gt; --ehlo &lt;dominio&gt;
+        │             --server &lt;MX&gt; --port 25 -tls --data @/tmp/mf-drill-*.eml
+        ▼
+   Servidor SMTP del destinatario
+        │  220 banner → EHLO → STARTTLS → MAIL FROM → RCPT TO → DATA
+        ▼
+   Veredicto parseado de la transcripción
+        ├─ 250 → ✅ ACEPTADO (encolado) → depende de filtros: INBOX/spam
+        ├─ 5xx → ⛔ RECHAZADO (protección activa: DMARC p=reject)
+        └─ 4xx → ⚠ error transitorio (reintenta más tarde)</pre>
+
+      <h4>Ejemplo real completo (datos ficticios)</h4>
+      <pre>$ python3 mailforge.py compose \
+    --from-name "CE0 Carlos Pérez" \
+    --from-email jefe@midominio.com \
+    --to test@midominio.com \
+    --subject "URGENTE: Factura #4471 vencida" \
+    --text "Adjunto la factura pendiente de abono." \
+    --send
+
+  ⚠ USO EN ENTORNO CONTROLADO: …
+  ¿Enviar de verdad este mensaje por SMTP? [y/N]: y
+
+╭ Transcripción SMTP — mx1.midominio.com:25 ═══════════════════╮
+│ -&gt; 'MAIL FROM:&lt;jefe@midominio.com&gt;'                          │
+│ &lt;~  '250 2.1.0 OK'                                           │
+│ -&gt; 'RCPT TO:&lt;test@midominio.com&gt;'                            │
+│ &lt;~  '250 2.1.5 OK'                                           │
+│ &lt;~  '250 2.0.0 OK — queued as 4Zx1q2'   ← ACEPTADO           │
+╰══════════════════════════════════════════════════════════════╝
+
+  ✉ ENVIADO de verdad vía mx1.midominio.com:25 → ACEPTADO (250) en 0.7s
+  💡 Comprueba la bandeja del destinatario (INBOX o spam) y las cabeceras
+     Authentication-Results del mensaje.</pre>
+
+      <h4>Chuleta de códigos SMTP</h4>
+      <table>
+        <thead><tr><th>Código</th><th>Significado</th><th>Qué hacer</th></tr></thead>
+        <tbody>
+          <tr><td><code>250</code></td><td>aceptado y encolado</td><td>revisa INBOX/spam del destinatario</td></tr>
+          <tr><td><code>550 5.7.26</code></td><td>rechazo por DMARC</td><td>✅ tu protección funciona</td></tr>
+          <tr><td><code>550 5.1.1</code></td><td>buzón inexistente</td><td>corrige el <code>--to</code></td></tr>
+          <tr><td><code>421 / 450</code></td><td>transitorio (greylisting)</td><td>reintenta en minutos</td></tr>
+          <tr><td><code>554</code></td><td>rechazo por políticas (spam, RBL)</td><td>revisa IP/reputación</td></tr>
+        </tbody>
+      </table>
+
+      <h4>¿Qué pasa después de que el servidor acepte?</h4>
+      <p>El mensaje llega al buzón y el receptor estampa su veredicto en las cabeceras. Ábrelo y busca <code>Authentication-Results:</code>:</p>
+      <pre>Authentication-Results: mx.destinatario.com;
+   spf=fail (sender IP is 203.0.113.7) smtp.mailfrom=midominio.com;
+   dkim=none (no signature);
+   dmarc=none action=none header.from=midominio.com</pre>
+      <p><code>dmarc=none action=none</code> + mensaje en INBOX → <b>tu dominio es suplantable</b> ❗ → ejecuta <code>harden</code>. Tras aplicarlo, el mismo drill dará <code>dmarc=fail action=quarantine/reject</code> o un <code>550</code> directo.</p>
+
+      <h4>Vía API local (para integraciones)</h4>
+      <pre>$ curl -s -X POST localhost:8787/api/spooflab/swaks -H 'Content-Type: application/json' \
+    -d '{"from_name":"CE0 Carlos Pérez","from_email":"jefe@midominio.com",
+         "to":"test@midominio.com","subject":"Drill","text":"Prueba",
+         "priority":"high","tls_mode":"tls"}' | jq '{sent, verdict, code}'
+<span class="o">{ "sent": true, "verdict": "accepted", "code": 250 }</span></pre>
 
       <h2 id="drill">🚀 <code>drill</code> — ENVÍO REAL con veredicto del servidor</h2>
       <div class="dangerbox">
@@ -481,14 +618,15 @@ python3 mailforge.py report midominio.com html   <span class="c"># → informe H
         <li>Botón <b>🛠 Generar configuración defensiva</b> para saltar a Hardening con el dominio precargado.</li>
       </ol>
 
-      <h2 id="web-spooflab">🎭 Consola web — Spoof Lab (envío real incluido)</h2>
+      <h2 id="web-spooflab">🎭 Consola web — Spoof Lab (compositor + envío real)</h2>
       <ol class="steps">
-        <li>Pestaña <b>Spoof Lab</b> → dominio <code>midominio.com</code> → elige motivo (💳/🔐/🎁) y directivo → <b>Generar drill</b>.</li>
-        <li>Revisa el <b>veredicto previsto</b> y el mensaje .eml (botón copiar).</li>
-        <li>Bloque <b>🚀 Envío real</b>: escribe tu buzón <code>jefe@midominio.com</code>, opcionalmente tu relay → <b>✉ Enviar drill real</b>.</li>
-        <li>Lee el veredicto del servidor: <b style="color:var(--good)">⛔ RECHAZADO</b> (defensa OK) o <b style="color:var(--warn)">✅ ACEPTADO (250)</b> + transcripción SMTP completa en pantalla.</li>
-        <li>Si fue aceptado: introduce <code>imap.midominio.com</code> + contraseña → <b>📥 ¿Llegó?</b> → te dice si está en INBOX o en spam. La contraseña vive solo en memoria.</li>
+        <li>Pestaña <b>Spoof Lab</b> → rellena el formulario: <b>From Name</b>, <b>From E-mail</b>, <b>To</b>, <b>Subject</b>, <b>Text</b>, <b>Reply-To</b> (opcional), <b>prioridad</b> y <b>adjuntos</b> (selector de ficheros + “attach another file”, hasta 10).</li>
+        <li>Marca la casilla de <b>entorno controlado</b> → <b>⚡ Generar mensaje + comandos</b> → ves el <code>.eml</code> exacto (descargable) y los comandos de inyección.</li>
+        <li>Bloque <b>🚀 Enviar de verdad (vía swaks)</b>: configura puerto (25/587), modo TLS y usuario SMTP si usas relay con login → botón <b>✉ Enviar AHORA (real, vía swaks)</b>.</li>
+        <li>Lee el veredicto en pantalla: <b style="color:var(--warn)">✅ ACEPTADO (250)</b> o <b style="color:var(--good)">⛔ RECHAZADO (5xx)</b> con la transcripción SMTP completa.</li>
+        <li>Si fue aceptado: introduce <code>imap.tudominio.com[/usuario]</code> + contraseña → <b>📥 ¿Llegó?</b> → te dice si aterrizó en INBOX o en spam. La contraseña vive solo en memoria.</li>
       </ol>
+      <p><b>Requisito:</b> el botón de envío necesita <code>swaks</code> instalado en la <b>máquina donde corre el servidor</b> (<code>sudo apt install swaks</code>). Sin él, la web sigue generando mensajes y comandos, y te lo dirá claramente.</p>
 
       <h2 id="web-harden">🛠 Consola web — Hardening</h2>
       <ol class="steps">
@@ -506,6 +644,8 @@ python3 mailforge.py report midominio.com html   <span class="c"># → informe H
           <tr><td><code>/api/analyze?domain=</code></td><td>GET</td><td><code>domain</code></td><td>análisis completo + score + vectores</td></tr>
           <tr><td><code>/api/dkim?domain=</code></td><td>GET</td><td><code>domain</code></td><td>claves DKIM encontradas</td></tr>
           <tr><td><code>/api/spooftest?domain=&amp;motif=&amp;exec_name=</code></td><td>GET</td><td><code>motif</code>: invoice|password|giftcard</td><td>mensaje + veredicto previsto + comandos</td></tr>
+          <tr><td><code>/api/spooflab/compose</code></td><td>POST</td><td><code>{from_name, from_email, to, subject, text, reply_to?, attachments[], priority?}</code></td><td><code>.eml</code> exacto + comandos de inyección</td></tr>
+          <tr><td><code>/api/spooflab/swaks</code></td><td>POST</td><td>igual que compose + <code>{smtp_host?, smtp_port?, smtp_user?, smtp_pass?, tls_mode?}</code></td><td><b>envío REAL vía swaks</b>: <code>{sent, verdict, code, transcript[], elapsed_s, …}</code></td></tr>
           <tr><td><code>/api/spooflab/send</code></td><td>POST</td><td><code>{domain, to, motif?, exec_name?, smtp_host?}</code></td><td><code>{sent, verdict, mx, transcript[], …}</code> — <b>envío real</b></td></tr>
           <tr><td><code>/api/spooflab/check</code></td><td>POST</td><td><code>{imap_host, imap_user, imap_pass, wait_seconds?}</code></td><td><code>{checked, verdict, inbox, junk, folders_hit[]}</code></td></tr>
           <tr><td><code>/api/harden?domain=&amp;ips=&amp;selector=&amp;policy=</code></td><td>GET</td><td>—</td><td>registros DNS + postfix + dkim_guide</td></tr>
@@ -576,6 +716,49 @@ $ curl -s -X POST localhost:8787/api/spooflab/check -H 'Content-Type: applicatio
         <li>Cierra con <code>report midominio.com html</code> y el plan de hardening.</li>
       </ol>
 
+      <h2 id="internos">🔬 Arquitectura interna (para curiosos y auditores)</h2>
+      <pre>mailforge.py (CLI Rich)          server/index.js (API Node)        web/ (React)
+        │                               │  JSON sobre HTTP            │
+        └───────────────┬───────────────┴──────────────┬──────────────┘
+                        ▼                              ▼
+                     api.py  ◄──── puente JSON (##JSON##) ────►  callCore()
+                        │
+        ┌───────────────┼───────────────────────────────┐
+        ▼               ▼                               ▼
+   core/dnsx.py    core/spf|dkim|dmarc.py          core/scorer.py
+   UDP→TCP→DoH     parsers RFC 7208/6376/7489      scoring 0-100 + 8 vectores
+        │               │                               │
+        └───────┬───────┴───────────┬───────────────────┘
+                ▼                   ▼
+        core/hardening.py      core/swaks_bridge.py
+        hardening + drills     compose_spoof_email() → .eml exacto
+        selftest, IMAP         swaks_send() → subprocess swaks + parser</pre>
+      <ul class="list">
+        <li><b>DNS</b> — cliente propio RFC 1035: EDNS0(4096) + bit DO, compresión de punteros, fallback UDP→TCP→DoH (dns.google/Cloudflare) con throttle y retry exponencial; DNSSEC detectado por DS + AD + RRSIG/DNSKEY.</li>
+        <li><b>Mensaje</b> — <code>EmailMessage</code> + <code>formataddr</code>: RFC 2047 solo en el nombre visible; adjuntos como partes base64 <code>multipart/mixed</code>; boundary aleatorio por mensaje.</li>
+        <li><b>Envío</b> — <code>subprocess.run(argv)</code> con lista de argumentos (nunca shell: imposible inyectar comandos por los campos), fichero temporal 0600 con borrado en <code>finally</code>, <code>--data @fichero</code> para entrega byte a byte.</li>
+        <li><b>Veredicto</b> — parser de la transcripción: respuestas <code>&lt;~</code> y errores <code>**</code>; el código del fin-de-DATA decide (el 221 de cierre se descarta).</li>
+        <li><b>Seguridad</b> — los pines de sesión (<code>X-Mailer: … (authorized drill)</code>) identifican el drill; las contraseñas SMTP/IMAP solo viven en memoria y no se loguean.</li>
+      </ul>
+
+      <h2 id="glosario">📖 Glosario para principiantes</h2>
+      <table>
+        <tbody>
+          <tr><td><b>Email spoofing</b></td><td>enviar un correo que <i>parece</i> de una dirección ajena manipulando cabeceras. Funciona cuando el dominio suplantado no publica SPF/DKIM/DMARC.</td></tr>
+          <tr><td><b>SPF</b> (RFC 7208)</td><td>registro DNS que lista qué IPs pueden enviar en nombre del dominio. <code>-all</code> rechaza al resto; <code>~all</code> solo sugiere; <code>?all</code> no dice nada.</td></tr>
+          <tr><td><b>DKIM</b> (RFC 6376)</td><td>firma criptográfica por mensaje: el servidor emisor firma y el receptor verifica con la clave pública publicada en DNS (<code>selector._domainkey</code>).</td></tr>
+          <tr><td><b>DMARC</b> (RFC 7489)</td><td>política que une SPF+DKIM y decide qué hacer con los fallos: <code>p=none</code> (nada), <code>quarantine</code> (spam) o <code>reject</code> (bloqueo). Incluye informes <code>rua</code>.</td></tr>
+          <tr><td><b>Envelope vs From:</b></td><td>el <i>sobre</i> (<code>MAIL FROM</code>) lo usa el protocolo SMTP; el <i>From:</i> visible es una cabecera. DMARC exige que coincidan (alineación) — el spoofing clásico los separa.</td></tr>
+          <tr><td><b>MX</b></td><td>registro DNS que dice qué servidor recibe el correo del dominio y en qué orden de prioridad.</td></tr>
+          <tr><td><b>STARTTLS</b></td><td>upgrade de la conexión SMTP a cifrada. Oportunista: si el otro no lo ofrece, se sigue en claro.</td></tr>
+          <tr><td><b>MTA-STS / TLS-RPT</b></td><td>política que fuerza TLS entre servidores + registro donde recibes informes de fallos TLS.</td></tr>
+          <tr><td><b>DNSSEC</b></td><td>firma criptográfica de las respuestas DNS (evita que un atacante falsifique tus registros SPF/DMARC en tránsito).</td></tr>
+          <tr><td><b>swaks</b></td><td>«Swiss Army Knife for SMTP»: CLI de prueba de correo que MailForge ejecuta por detrás para el envío real.</td></tr>
+          <tr><td><b>Greylisting (4xx)</b></td><td>el servidor pide reintentar la primera vez: técnica anti-spam. Reintenta en minutos.</td></tr>
+          <tr><td><b>Drill</b></td><td>simulacro autorizado: mensaje suplantado contra TU dominio para medir tu defensa, como un simulacro de incendio.</td></tr>
+        </tbody>
+      </table>
+
       <h2 id="legal">⚖️ Uso legítimo</h2>
       <div class="dangerbox">
         <b>Permitido:</b> analizar tu dominio o dominios con permiso · drills de envío real <b>solo a buzones del dominio analizado</b> · investigación publicada.<br />
@@ -586,7 +769,7 @@ $ curl -s -X POST localhost:8787/api/spooflab/check -H 'Content-Type: applicatio
     </main>
   </div>
 
-  <footer><div class="container">🛡 MailForge v1.2.0 · MIT · <a href="https://github.com/D1se0/emailSpoofingTool" style="color:var(--accent3)">GitHub</a> · <a href="index.html" style="color:var(--accent3)">Inicio</a></div></footer>
+  <footer><div class="container">🛡 MailForge v1.3.0 · MIT · <a href="https://github.com/D1se0/emailSpoofingTool" style="color:var(--accent3)">GitHub</a> · <a href="index.html" style="color:var(--accent3)">Inicio</a></div></footer>
 
   <script>
     // active TOC on scroll

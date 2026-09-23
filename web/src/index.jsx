@@ -257,10 +257,13 @@ function SpoofLab() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [data, setData] = useState(null);               // preview + comandos
-  // in-domain fast path (drill real)
-  const [inDomain, setInDomain] = useState(true);
+  // real send via swaks (any recipient the operator controls)
   const [sendResult, setSendResult] = useState(null);
   const [sending, setSending] = useState(false);
+  const [smtpUser, setSmtpUser] = useState("");
+  const [smtpPass, setSmtpPass] = useState("");
+  const [smtpPort, setSmtpPort] = useState("25");
+  const [tlsMode, setTlsMode] = useState("tls");
   const [imap, setImap] = useState("");
   const [imapPass, setImapPass] = useState("");
   const [checking, setChecking] = useState(false);
@@ -294,17 +297,22 @@ function SpoofLab() {
     } catch (err) { setError(err.message); } finally { setLoading(false); }
   };
 
-  const sendNow = async () => {
-    setSending(true); setSendResult(null);
+  const sendViaSwaks = async () => {
+    setSending(true); setSendResult(null); setCheckResult(null);
     try {
-      setSendResult(await api("/api/spooflab/send", {
+      setSendResult(await api("/api/spooflab/swaks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ domain: (fromEmail.split("@")[1] || "").trim().toLowerCase(),
-          to: to.trim(), motif: "invoice", exec_name: fromName || "CEO",
-          smtp_host: relay.trim() || undefined }),
+        body: JSON.stringify({ from_name: fromName, from_email: fromEmail,
+          to: to.trim(), subject, text, reply_to: replyTo,
+          attachments, priority,
+          smtp_host: relay.trim() || undefined,
+          smtp_port: parseInt(smtpPort, 10) || 25,
+          smtp_user: smtpUser.trim() || undefined,
+          smtp_pass: smtpPass || undefined,
+          tls_mode: tlsMode }),
       }));
-    } catch (err) { setSendResult({ verdict: "error", error: err.message }); }
+    } catch (err) { setSendResult({ verdict: "error", errors: [err.message] }); }
     finally { setSending(false); }
   };
 
@@ -449,53 +457,80 @@ function SpoofLab() {
             <pre style={{ fontSize: "0.74rem", overflowX: "auto", lineHeight: 1.6, whiteSpace: "pre-wrap", background: "rgba(0,0,0,0.4)", padding: 16, borderRadius: 10 }}>{data.commands}</pre>
           </div>
 
-          {/* in-domain fast path: envío automatizado con guard */}
-          {fromEmail.includes("@") && to.trim().toLowerCase().endsWith("@" + fromEmail.split("@")[1].trim().toLowerCase()) && (
-            <div className="card" style={{ borderColor: "rgba(91,228,155,.4)" }}>
-              <h3>📮 Envío automatizado disponible</h3>
-              <p style={{ color: "var(--muted)", fontSize: "0.86rem" }}>
-                El destinatario pertenece al mismo dominio del From (tu dominio):
-                MailForge puede enviarlo por ti al MX con transcripción completa.
-              </p>
-              <button className="btn btn-primary" onClick={sendNow} disabled={sending || !to.includes("@")}>
-                {sending ? <><span className="spinner" /> Enviando…</> : "✉ Enviar drill real (in-domain)"}
-              </button>
-              {sendResult && (
-                <div className="fade-up" style={{ marginTop: 14 }}>
-                  <div style={{ padding: "12px 16px", borderRadius: 10, border: "1px solid var(--line-strong)", background: "rgba(0,0,0,.3)" }}>
-                    <b style={{ color: sendResult.sent ? "var(--warn)" : sendResult.verdict === "rejected" ? "var(--good)" : "var(--bad)" }}>
-                      {sendResult.sent ? "✅ ACEPTADO POR EL SERVIDOR (250)" :
-                       sendResult.verdict === "rejected" ? "⛔ RECHAZADO POR EL SERVIDOR" :
-                       "⚠ " + (sendResult.error || sendResult.verdict)}
-                    </b>
-                    {sendResult.mx && <span style={{ color: "var(--muted)" }}> — vía {sendResult.mx}:{sendResult.port}</span>}
-                    {sendResult.error && <div style={{ color: "var(--muted)", fontSize: "0.85rem", marginTop: 6 }}>{sendResult.error}</div>}
-                  </div>
-                  {sendResult.transcript && sendResult.transcript.length > 0 && (
-                    <pre style={{ fontSize: "0.72rem", background: "rgba(0,0,0,.45)", border: "1px solid var(--line)", borderRadius: 10, padding: 14, overflowX: "auto", marginTop: 10, lineHeight: 1.55, color: "#c9d4ff" }}>
-                      {sendResult.transcript.slice(-26).join("\n")}
-                    </pre>
-                  )}
-                  {sendResult.sent && (
-                    <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                      <input placeholder="imap.tudominio.com[/usuario]" value={imap} onChange={(e) => setImap(e.target.value)}
-                        style={{ background: "rgba(7,10,19,0.6)", border: "1px solid var(--line-strong)", color: "var(--text)", borderRadius: 10, padding: "10px 13px", fontFamily: "var(--mono)", minWidth: 200 }} />
-                      <input type="password" placeholder="contraseña IMAP (no se guarda)" value={imapPass} onChange={(e) => setImapPass(e.target.value)}
-                        style={{ background: "rgba(7,10,19,0.6)", border: "1px solid var(--line-strong)", color: "var(--text)", borderRadius: 10, padding: "10px 13px", fontFamily: "var(--mono)", minWidth: 190 }} />
-                      <button className="btn btn-ghost btn-sm" onClick={checkInbox} disabled={checking || !imap.trim()}>
-                        {checking ? <><span className="spinner" /> Buscando…</> : "📥 ¿Llegó? (IMAP)"}
-                      </button>
-                    </div>
-                  )}
-                  {checkResult && (
-                    <div className="fade-up" style={{ marginTop: 10, padding: "11px 15px", borderRadius: 10, background: "rgba(0,0,0,.3)", border: "1px solid var(--line)", fontWeight: 700, color: checkResult.checked ? verdictColor(checkResult.verdict) : "var(--warn)" }}>
-                      {checkResult.checked ? `📥 ${checkResult.verdict}` : `⚠ ${checkResult.error}`}
-                    </div>
+          {/* REAL SEND via swaks — any recipient the operator controls */}
+          <div className="card" style={{ borderColor: "rgba(255,92,122,.45)" }}>
+            <h3>🚀 Enviar de verdad (vía swaks)</h3>
+            <p style={{ color: "var(--muted)", fontSize: "0.86rem", marginBottom: 12 }}>
+              La herramienta ejecuta <b>swaks</b> por detrás con tus campos: resuelve
+              el MX del destinatario, negocia STARTTLS y entrega tu .eml exacto.
+              Necesita swaks instalado en esta máquina (<code>apt install swaks</code>).
+            </p>
+            <div className="grid grid-3" style={{ gap: 12, marginBottom: 12 }}>
+              <div>
+                <label style={{ color: "var(--muted)", fontSize: "0.8rem" }}>Puerto SMTP</label>
+                <input style={fieldStyle} value={smtpPort} onChange={(e) => setSmtpPort(e.target.value)} placeholder="25" />
+              </div>
+              <div>
+                <label style={{ color: "var(--muted)", fontSize: "0.8rem" }}>TLS</label>
+                <select style={fieldStyle} value={tlsMode} onChange={(e) => setTlsMode(e.target.value)}>
+                  <option value="tls">STARTTLS oportunista (-tls)</option>
+                  <option value="tls-optional">opcional (-tls-optional)</option>
+                  <option value="tls-only">forzado (-tls-only)</option>
+                  <option value="none">sin TLS</option>
+                </select>
+              </div>
+              <div>
+                <label style={{ color: "var(--muted)", fontSize: "0.8rem" }}>Usuario SMTP (si relay con auth)</label>
+                <input style={fieldStyle} value={smtpUser} onChange={(e) => setSmtpUser(e.target.value)} placeholder="opcional" />
+              </div>
+            </div>
+            {smtpUser && (
+              <div style={{ marginBottom: 12 }}>
+                <label style={{ color: "var(--muted)", fontSize: "0.8rem" }}>Contraseña SMTP (no se guarda)</label>
+                <input type="password" style={fieldStyle} value={smtpPass} onChange={(e) => setSmtpPass(e.target.value)} />
+              </div>
+            )}
+            <button className="btn btn-primary" onClick={sendViaSwaks} disabled={sending || !to.includes("@") || !fromEmail.includes("@")}>
+              {sending ? <><span className="spinner" /> Enviando de verdad…</> : "✉ Enviar AHORA (real, vía swaks)"}
+            </button>
+            {sendResult && (
+              <div className="fade-up" style={{ marginTop: 14 }}>
+                <div style={{ padding: "12px 16px", borderRadius: 10, border: "1px solid var(--line-strong)", background: "rgba(0,0,0,.3)" }}>
+                  <b style={{ color: sendResult.sent ? "var(--warn)" : sendResult.verdict === "rejected" ? "var(--good)" : "var(--bad)" }}>
+                    {sendResult.sent ? `✅ ACEPTADO POR EL SERVIDOR (${sendResult.code})` :
+                     sendResult.verdict === "rejected" ? `⛔ RECHAZADO (${sendResult.code})` :
+                     "⚠ " + (sendResult.errors || [])[0] || sendResult.verdict}
+                  </b>
+                  {sendResult.server && <span style={{ color: "var(--muted)" }}> — vía {sendResult.server}:{sendResult.port} en {sendResult.elapsed_s}s</span>}
+                  {sendResult.note && <div style={{ fontSize: "0.85rem", marginTop: 6 }}>{sendResult.note}</div>}
+                  {(sendResult.errors || []).length > 0 && !sendResult.sent && (
+                    <div style={{ color: "var(--muted)", fontSize: "0.85rem", marginTop: 6 }}>{sendResult.errors.join(" · ")}</div>
                   )}
                 </div>
-              )}
-            </div>
-          )}
+                {sendResult.transcript && sendResult.transcript.length > 0 && (
+                  <pre style={{ fontSize: "0.72rem", background: "rgba(0,0,0,.45)", border: "1px solid var(--line)", borderRadius: 10, padding: 14, overflowX: "auto", marginTop: 10, lineHeight: 1.55, color: "#c9d4ff" }}>
+                    {sendResult.transcript.slice(-26).join("\n")}
+                  </pre>
+                )}
+                {sendResult.sent && (
+                  <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                    <input placeholder="imap.tudominio.com[/usuario]" value={imap} onChange={(e) => setImap(e.target.value)}
+                      style={{ background: "rgba(7,10,19,0.6)", border: "1px solid var(--line-strong)", color: "var(--text)", borderRadius: 10, padding: "10px 13px", fontFamily: "var(--mono)", minWidth: 200 }} />
+                    <input type="password" placeholder="contraseña IMAP (no se guarda)" value={imapPass} onChange={(e) => setImapPass(e.target.value)}
+                      style={{ background: "rgba(7,10,19,0.6)", border: "1px solid var(--line-strong)", color: "var(--text)", borderRadius: 10, padding: "10px 13px", fontFamily: "var(--mono)", minWidth: 190 }} />
+                    <button className="btn btn-ghost btn-sm" onClick={checkInbox} disabled={checking || !imap.trim()}>
+                      {checking ? <><span className="spinner" /> Buscando…</> : "📥 ¿Llegó? (IMAP)"}
+                    </button>
+                  </div>
+                )}
+                {checkResult && (
+                  <div className="fade-up" style={{ marginTop: 10, padding: "11px 15px", borderRadius: 10, background: "rgba(0,0,0,.3)", border: "1px solid var(--line)", fontWeight: 700, color: checkResult.checked ? verdictColor(checkResult.verdict) : "var(--warn)" }}>
+                    {checkResult.checked ? `📥 ${checkResult.verdict}` : `⚠ ${checkResult.error}`}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>}
         </div>
       )}
     </section>

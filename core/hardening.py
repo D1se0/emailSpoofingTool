@@ -259,7 +259,7 @@ def compose_spoof_email(from_name: str = "", from_email: str = "",
         mixed["Date"] = formatdate(localtime=False)
         mixed["Message-ID"] = make_msgid(domain=(from_email.rsplit("@", 1)[-1]
                                                  or "mailforge.local"))
-        mixed["X-Mailer"] = "MailForge-SpoofLab/1.2 (authorized drill)"
+        mixed["X-Mailer"] = "MailForge-SpoofLab/1.3 (authorized drill)"
         if reply_to:
             mixed["Reply-To"] = reply_to
         if priority in ("high", "low"):
@@ -290,7 +290,7 @@ def compose_spoof_email(from_name: str = "", from_email: str = "",
     msg["Date"] = formatdate(localtime=False)
     msg["Message-ID"] = make_msgid(domain=(from_email.rsplit("@", 1)[-1]
                                             or "mailforge.local"))
-    msg["X-Mailer"] = "MailForge-SpoofLab/1.2 (authorized drill)"
+    msg["X-Mailer"] = "MailForge-SpoofLab/1.3 (authorized drill)"
     if reply_to:
         msg["Reply-To"] = reply_to
     if priority in ("high", "low"):
@@ -365,7 +365,7 @@ def generate_freeform_commands(from_email: str, to: str, from_name: str = "",
           {common} \\
           --h-From: {_shq(f"{name} <{from_email}>")}{reply_line}{prio_lines} \\
           --h-Subject: {_shq(subject)} \\
-          --h-X-Mailer: 'MailForge-SpoofLab/1.2 (authorized drill)' \\
+          --h-X-Mailer: 'MailForge-SpoofLab/1.3 (authorized drill)' \\
           --body {_shq(text[:1800])}
 
     ▸ Opción 2 — mensaje .eml EXACTO (byte a byte, adjuntos incluidos) vía swaks:

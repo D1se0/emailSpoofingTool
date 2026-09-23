@@ -222,6 +222,28 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, data);
     }
 
+    if (pathname === "/api/spooflab/swaks" && req.method === "POST") {
+      const body = JSON.parse((await readBody(req)) || "{}");
+      const atts = Array.isArray(body.attachments) ? body.attachments.slice(0, 10) : [];
+      const totalB64 = atts.reduce((n, a) => n + String(a.content_b64 || "").length, 0);
+      if (totalB64 > 8 * 1024 * 1024) {
+        return send(res, 413, { error: "adjuntos demasiado grandes (máx ~6MB en base64)" });
+      }
+      if (!/^[^@\s]{1,64}@[^@\s]{1,253}$/.test(String(body.to || "")) ||
+          !/^[^@\s]{1,64}@[^@\s]{1,253}$/.test(String(body.from_email || ""))) {
+        return send(res, 400, { error: "from_email y to deben ser direcciones válidas" });
+      }
+      const data = await callCore("swaks_send", {
+        from_name: body.from_name, from_email: body.from_email,
+        to: body.to, subject: body.subject, text: body.text,
+        reply_to: body.reply_to, attachments: atts,
+        priority: body.priority, smtp_host: body.smtp_host,
+        smtp_port: body.smtp_port, smtp_user: body.smtp_user,
+        smtp_pass: body.smtp_pass, tls_mode: body.tls_mode,
+      }, 120000);
+      return send(res, 200, data);
+    }
+
     if (pathname === "/api/spooflab/send" && req.method === "POST") {
       const body = JSON.parse((await readBody(req)) || "{}");
       const domain = (body.domain || "").toString().toLowerCase().trim();

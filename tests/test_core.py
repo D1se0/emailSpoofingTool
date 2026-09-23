@@ -16,11 +16,40 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from core import dnsx, spf, dkim, dmarc, _rsalite, scorer, hardening  # noqa: E402
+from core import dnsx, spf, dkim, dmarc, _rsalite, scorer, hardening, swaks_bridge  # noqa: E402
 
 # ---------------------------------------------------------------------------
-# DNS wire helpers
+# swaks bridge (v1.3)
 # ---------------------------------------------------------------------------
+
+def test_swaks_transcript_parser():
+    t = ("=== Trying mail.guerrillamail.com:25...\n"
+         "=== Connected to mail.guerrillamail.com.\n"
+         "<~  250 2.0.0 OK: queued as abc123\n"
+         " ~> QUIT\n"
+         "<~  221 2.0.0 Bye")
+    p = swaks_bridge.parse_transcript(t)
+    assert p["verdict"] == "accepted" and p["code"] == 250
+    # 221 (BYE) no cuenta como veredicto de entrega
+    t2 = "<~ 550 5.7.26 DMARC fail\n ~> QUIT\n<~ 221 2.0.0 Bye"
+    p2 = swaks_bridge.parse_transcript(t2)
+    assert p2["verdict"] == "rejected" and p2["code"] == 550
+    # transitorio
+    p3 = swaks_bridge.parse_transcript("<~ 421 4.7.0 too busy")
+    assert p3["verdict"] == "error"
+
+
+def test_swaks_guards():
+    r = swaks_bridge.swaks_send(from_email="no-es-email", to="a@b.com")
+    assert r["verdict"] == "error" and r["errors"]
+    r = swaks_bridge.swaks_send(from_email="a@b.com", to="malo")
+    assert r["verdict"] == "error" and r["errors"]
+
+
+def test_swaks_find_binary():
+    # en el sandbox hay swaks; en cualquier caso devuelve str o None (no crashea)
+    p = swaks_bridge._find_swaks()
+    assert p is None or os.path.isfile(p)
 
 
 class TestDnsWire:

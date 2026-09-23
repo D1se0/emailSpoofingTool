@@ -75,6 +75,7 @@ score = 0.20·SPF + 0.10·DKIM + 0.40·DMARC + 0.10·DNSSEC + 0.10·TLS + 0.10·
 | `/api/rollout?domain=` | GET | plan DMARC por fases |
 | `/api/spooftest?domain=&motif=` | GET | drill del Spoof Lab: mensaje + veredicto + comandos de inyección |
 | `/api/spooflab/compose` | POST | compositor libre: From/To/Subject/Text/Reply-To/prioridad/adjuntos → .eml exacto + comandos |
+| `/api/spooflab/swaks` | POST | **ENVÍO REAL vía swaks** con los parámetros del formulario: {sent, verdict, code, transcript, elapsed_s} |
 | `/api/selftest` | POST | `{domain, to, dry_run}` — solo in-domain (403 si no) |
 | `/api/verify` | POST | `{raw}` verifica firmas DKIM de un email pegado |
 
@@ -88,6 +89,7 @@ python3 mailforge.py dkim <dominio> [sel…]    # caza de selectores DKIM
 python3 mailforge.py spooftest <dominio> [motivo]  # drill red-team (sin envío)
 python3 mailforge.py compose --from-name 'CE0' --from-email jefe@midominio.com \
     --to buzon@destino.com --subject '…' --text '…' [--attach f.pdf --priority high]  # compositor libre
+python3 mailforge.py compose … --send  # ENVÍO REAL: ejecuta swaks por detrás con tus parámetros
 python3 mailforge.py harden <dominio>         # registros DNS + config
 python3 mailforge.py rollout <dominio>        # plan DMARC por fases
 python3 mailforge.py selftest <dom> <buzon>   # email de prueba autorizado

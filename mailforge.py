@@ -55,7 +55,7 @@ except ImportError:  # pragma: no cover
     Console = Table = Panel = Text = box = Progress = Prompt = Confirm = None
 
 APP = "MailForge"
-VERSION = "1.2.0"
+VERSION = "1.3.0"
 SAVE_DIR = os.path.join(_HERE, "reports")
 CONFIG_PATH = os.path.join(_HERE, ".mailforge.json")
 
@@ -419,13 +419,18 @@ def do_spooftest(domain: str, to_addr: str = "", motif: str = "invoice",
 def do_compose(from_name: str = "", from_email: str = "", to_addr: str = "",
                subject: str = "", text: str = "", reply_to: str = "",
                attachments: list = None, priority: str = "normal",
-               relay: str = "", save: str = "") -> None:
-    """Free-form composer: exact .eml from user fields + injection commands."""
+               relay: str = "", port: int = 25, smtp_user: str = "",
+               tls_mode: str = "tls", save: str = "",
+               send_now: bool = False) -> None:
+    """Free-form composer: exact .eml from user fields + injection commands.
+    With --send, delivers FOR REAL through the installed swaks binary."""
     if not from_email or "@" not in from_email or not to_addr or "@" not in to_addr:
         console.print("  uso: compose --from-name 'CE0 Carlos Pérez' --from-email jefe@midominio.com "
                       "--to buzon@destino.com --subject '…' --text '…' "
                       "[--reply-to …] [--attach f1 --attach f2] "
-                      "[--priority high|normal|low] [--relay host] [--save drill.eml]")
+                      "[--priority high|normal|low] [--relay host --port 25] "
+                      "[--smtp-user usuario] [--no-tls|--tls-optional|--tls-only] "
+                      "[--save drill.eml] [--send]")
         return
     atts = []
     for path in (attachments or []):
@@ -468,6 +473,61 @@ def do_compose(from_name: str = "", from_email: str = "", to_addr: str = "",
             console.print(f"  💾 Guardado: [bold]{save}[/]")
         except OSError as exc:
             console.print(f"  [red]⚠ no se pudo guardar {save}: {exc}[/]")
+
+    if not send_now:
+        return
+
+    # ── REAL SEND through swaks ─────────────────────────────────────────
+    from core.swaks_bridge import swaks_send, _find_swaks
+    if not _find_swaks():
+        console.print("  [red]✖ swaks no está instalado.[/] Instálalo con "
+                      "`sudo apt install swaks` (Debian/Ubuntu/Kali), "
+                      "`brew install swaks` (macOS) o descárgalo de "
+                      "jetmore.org/john/code/swaks/ y vuelve a intentarlo.")
+        return
+    if RICH:
+        console.print()
+        ok = Confirm.ask("¿Enviar de verdad este mensaje por SMTP?",
+                         default=False)
+    else:
+        ok = input("¿Enviar de verdad? (s/N): ").lower().strip() in ("s", "si", "y")
+    if not ok:
+        console.print("  [yellow]Envío cancelado por el operador.[/]")
+        return
+    if RICH:
+        with Progress(transient=True) as prog:
+            t = prog.add_task("[red]Enviando vía swaks…", total=4)
+            for _ in range(4):
+                time.sleep(0.1)
+                prog.advance(t)
+    res = swaks_send(from_name=from_name, from_email=from_email, to=to_addr,
+                     subject=subject, text=text, reply_to=reply_to,
+                     attachments=atts, priority=priority,
+                     smtp_host=relay, smtp_port=port or 25,
+                     smtp_user=smtp_user,
+                     smtp_pass=os.environ.get("MAILFORGE_SMTP_PASS", ""),
+                     tls_mode=tls_mode)
+    tr = "\n".join(res.get("transcript", [])[-22:])
+    if tr:
+        _panel(f"Transcripción SMTP — {res.get('server', '?')}:{res.get('port', 25)}",
+               Text(tr), border="dim")
+    if RICH:
+        style = {"accepted": "bold yellow", "rejected": "bold green",
+                 "error": "bold red"}.get(res.get("verdict"), "")
+        if res.get("sent"):
+            console.print(f"  ✉ ENVIADO de verdad vía {res.get('server')}:{res.get('port')} "
+                          f"→ [{style}]ACEPTADO ({res.get('code')})[/] "
+                          f"en {res.get('elapsed_s')}s")
+        else:
+            console.print(f"  ✖ [{style}]{res.get('note', 'error')}[/]")
+            if res.get("message"):
+                console.print(f"     ↳ {res.get('message')}")
+            for e in res.get("errors", []):
+                console.print(f"     ↳ {e}")
+    else:
+        print(res.get("note", res.get("verdict")))
+    console.print("  💡 Comprueba la bandeja del destinatario (INBOX o spam) "
+                  "y las cabeceras Authentication-Results del mensaje.")
 
 
 def do_drill(domain: str, to_addr: str, motif: str = "invoice",
@@ -704,7 +764,14 @@ def interactive_repl() -> None:
                 reply_to=_gflag(args, "--reply-to"),
                 attachments=_gmulti(args, "--attach"),
                 priority=_gflag(args, "--priority") or "normal",
-                relay=_gflag(args, "--relay"), save=_gflag(args, "--save"))
+                relay=_gflag(args, "--relay"),
+                port=int(_gflag(args, "--port") or 25),
+                smtp_user=_gflag(args, "--smtp-user"),
+                tls_mode=("tls-optional" if "--tls-optional" in args else
+                          "tls-only" if "--tls-only" in args else
+                          "none" if "--no-tls" in args else "tls"),
+                save=_gflag(args, "--save"),
+                send_now="--send" in args or "--send=yes" in args)
         elif cmd == "drill":
             if len(args) >= 2:
                 if RICH:
@@ -836,7 +903,12 @@ def main() -> None:
             text=_flag("--text"), reply_to=_flag("--reply-to"),
             attachments=_multi("--attach"),
             priority=_flag("--priority") or "normal",
-            relay=_flag("--relay"), save=_flag("--save"))
+            relay=_flag("--relay"), port=int(_flag("--port") or 25),
+            smtp_user=_flag("--smtp-user"),
+            tls_mode=("tls-optional" if "--tls-optional" in ns.args else
+                      "tls-only" if "--tls-only" in ns.args else
+                      "none" if "--no-tls" in ns.args else "tls"),
+            save=_flag("--save"), send_now="--send" in ns.args)
     elif cmd == "drill":
         if len(args) < 2:
             console.print("uso: drill <dominio> <buzon@dominio> [--motif invoice|password|giftcard] "

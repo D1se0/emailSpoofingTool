@@ -161,6 +161,27 @@ def main() -> None:
                              "(simulacros de phishing autorizados).")
             emit(out)
 
+        elif action == "swaks_send":
+            """REAL send through installed swaks: user params → swaks argv."""
+            from core import swaks_bridge
+            atts = (payload.get("attachments") or [])[:10]
+            out = swaks_bridge.swaks_send(
+                from_name=(payload.get("from_name") or "").strip()[:120],
+                from_email=(payload.get("from_email") or "").strip()[:254],
+                to=(payload.get("to") or "").strip()[:254],
+                subject=(payload.get("subject") or "").strip()[:998],
+                text=str(payload.get("text") or "")[:100000],
+                reply_to=(payload.get("reply_to") or "").strip()[:254],
+                attachments=atts,
+                priority=(payload.get("priority") or "normal").strip()[:8],
+                smtp_host=(payload.get("smtp_host") or "").strip()[:253],
+                smtp_port=int(payload.get("smtp_port") or 25) or 25,
+                smtp_user=(payload.get("smtp_user") or "").strip()[:128],
+                smtp_pass=str(payload.get("smtp_pass") or "")[:128],
+                tls_mode=(payload.get("tls_mode") or "tls").strip()[:14],
+                timeout=int(payload.get("timeout") or 45))
+            emit(out)
+
         elif action == "drill_send":
             domain = (payload.get("domain") or "").lower().strip()
             to = (payload.get("to") or "").lower().strip()
