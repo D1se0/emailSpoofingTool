@@ -18,6 +18,13 @@
 - Node **18+** (solo si quieres la web/API)
 - Sin bases de datos, sin telemetría, stateless
 
+## 2b. Las dos webs
+
+| Artefacto | Propósito | Backend |
+|---|---|---|
+| `web/` + `server/` — **consola local** | testeo interactivo: analyzer, **Spoof Lab**, hardening, self-test | sí (`npm start` → :8787) |
+| `site/` — **web pública (Pages)** | documentación, arquitectura, descargas | ninguno (estática) |
+
 ## 3. Arquitectura
 
 ```
@@ -66,12 +73,25 @@ score = 0.20·SPF + 0.10·DKIM + 0.40·DMARC + 0.10·DNSSEC + 0.10·TLS + 0.10·
 | `/api/dkim?domain=` | GET | caza de selectores |
 | `/api/harden?domain=&ips=&selector=&policy=` | GET | genera registros/configs |
 | `/api/rollout?domain=` | GET | plan DMARC por fases |
+| `/api/spooftest?domain=&motif=` | GET | drill del Spoof Lab: mensaje + veredicto + comandos de inyección |
 | `/api/selftest` | POST | `{domain, to, dry_run}` — solo in-domain (403 si no) |
 | `/api/verify` | POST | `{raw}` verifica firmas DKIM de un email pegado |
 
 ## 7. Comandos CLI
 
 Ver `python3 mailforge.py --help` y la sección Docs de la web.
+
+```bash
+python3 mailforge.py analyze <dominio>        # análisis completo + score
+python3 mailforge.py dkim <dominio> [sel…]    # caza de selectores DKIM
+python3 mailforge.py spooftest <dominio> [motivo]  # drill red-team (sin envío)
+python3 mailforge.py harden <dominio>         # registros DNS + config
+python3 mailforge.py rollout <dominio>        # plan DMARC por fases
+python3 mailforge.py selftest <dom> <buzon>   # email de prueba autorizado
+python3 mailforge.py report <dominio> html    # informe HTML/JSON
+python3 mailforge.py watch <dominio> 60       # monitorización continua
+python3 mailforge.py                          # modo interactivo
+```
 
 ## 8. Desarrollo
 

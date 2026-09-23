@@ -28,7 +28,9 @@
 | 🛠 **Hardening** | Genera TXT SPF/DMARC/MTA-STS listos para pegar, config Postfix+OpenDKIM, guía de rotación DKIM |
 | 📈 **Rollout DMARC por fases** | p=none → quarantine pct=25 → pct=100 → reject (sin romper remitentes legítimos) |
 | ✉️ **Self-test autorizado** | 1 email de prueba **solo a un buzón de TU dominio**, marcado con cabeceras `X-MailForge-Test` |
-| 🖥 **Web dashboard** | React: análisis en vivo, scoring animado, matriz de vectores, editor de hardening, docs integradas |
+| 🎭 **Spoof Lab** | Genera el mensaje suplantado que un atacante crearía, predice el veredicto y te da los comandos para inyectarlo **tú** desde tu relay hacia un buzón tuyo (sin que MailForge envíe nada) |
+| 🖥 **Consola local** | Dashboard React conectado al motor: análisis en vivo, scoring animado, Spoof Lab, hardening — requiere `server/` en `:8787` |
+| 🌐 **Web pública** | GitHub Pages: documentación, arquitectura y descargas — estática pura, sin backend (`site/`) |
 | 📄 **Informes** | JSON + HTML autocontenidos en `reports/` |
 | 👁 **Monitor** | `watch` re-escanea periódicamente y avisa si cambia el score |
 | 🚫 **Zero-deps core** | El motor es Python stdlib puro (parser DNS propio, RSA/Ed25519 verify-only) |
@@ -56,20 +58,27 @@ python3 mailforge.py analyze gmail.com        # análisis completo + score
 python3 mailforge.py dkim gmail.com google s1 # caza selectores concretos
 python3 mailforge.py harden midominio.com     # registros DNS + config servidores
 python3 mailforge.py rollout midominio.com    # plan DMARC por fases
+python3 mailforge.py spooftest midominio.com invoice  # drill red-team (sin envío)
 python3 mailforge.py report midominio.com html
 python3 mailforge.py watch midominio.com 60
 python3 mailforge.py                          # modo interactivo
 ```
 
-## 🌐 Web
+## 🖥 Consola local (web de testeo)
 
 ```bash
-cd server && npm start     # http://localhost:8787  (API + dashboard)
-cd web && npm run build    # reconstruir el bundle tras editar web/src
+cd server && npm install && npm start     # http://localhost:8787  (API + consola)
+cd web && npm run build                   # reconstruir el bundle tras editar web/src
 ```
 
-Dashboard con: análisis en vivo, gauge de score animado, matriz de vectores, tablas SPF/DKIM/DMARC,
-generador de hardening, y la sección **Docs** con toda la documentación.
+Consola con: análisis en vivo, gauge animado, **Spoof Lab** (drill red-team), matriz de vectores,
+generador de hardening y self-test. Necesita el backend local corriendo.
+
+## 🌐 Web pública (GitHub Pages)
+
+`site/index.html` — documentación, arquitectura, RFCs y descargas. **Estática pura**:
+sin backend ni llamadas a APIs. Se despliega sola en cada push a `main`.
+
 También hay documentación offline en [`docs.md`](docs.md).
 
 ## 📚 Docs

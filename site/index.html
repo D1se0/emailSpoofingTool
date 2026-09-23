@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MailForge — Anti-Spoofing Suite (documentación oficial)</title>
+  <meta name="description" content="MailForge: analiza SPF, DKIM, DMARC, DNSSEC y MTA-STS de tu dominio, simula vectores de ataque de spoofing y genera la configuración defensiva. Open source, MIT." />
+  <meta name="theme-color" content="#070a13" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>🛡</text></svg>" />
+  <style>
+    :root {
+      --bg:#070a13; --panel:rgba(18,23,38,.72); --line:rgba(120,140,255,.14);
+      --line-strong:rgba(120,140,255,.3); --text:#e7eaf3; --muted:#8b93a7;
+      --accent:#6c8cff; --accent2:#9a6cff; --accent3:#4dd8ff; --good:#5be49b;
+      --warn:#ffd24d; --bad:#ff5c7a; --font:"Inter",system-ui,sans-serif;
+      --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+    }
+    *{box-sizing:border-box;margin:0;padding:0}
+    html{scroll-behavior:smooth}
+    body{background:var(--bg);color:var(--text);font-family:var(--font);line-height:1.6;-webkit-font-smoothing:antialiased}
+    .aurora{position:fixed;inset:0;z-index:-2;background:
+      radial-gradient(ellipse 80% 50% at 20% -10%,rgba(108,140,255,.18),transparent),
+      radial-gradient(ellipse 60% 40% at 85% 10%,rgba(154,108,255,.14),transparent),
+      radial-gradient(ellipse 70% 60% at 50% 110%,rgba(77,216,255,.10),transparent),var(--bg)}
+    .aurora::after{content:"";position:absolute;inset:0;background-image:
+      linear-gradient(rgba(120,140,255,.04) 1px,transparent 1px),
+      linear-gradient(90deg,rgba(120,140,255,.04) 1px,transparent 1px);
+      background-size:44px 44px;mask-image:radial-gradient(ellipse 70% 60% at 50% 40%,#000 30%,transparent 75%)}
+    .container{max-width:1080px;margin:0 auto;padding:0 24px}
+    nav{position:sticky;top:0;z-index:50;backdrop-filter:blur(18px);background:rgba(7,10,19,.72);border-bottom:1px solid var(--line)}
+    .nav-inner{display:flex;align-items:center;gap:22px;height:62px}
+    .brand{display:flex;align-items:center;gap:9px;font-weight:800;font-size:1.12rem;text-decoration:none;color:var(--text)}
+    .brand em{font-style:normal;background:linear-gradient(90deg,var(--accent),var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent}
+    .nav-links{margin-left:auto;display:flex;gap:4px;align-items:center}
+    .nav-links a{color:var(--muted);text-decoration:none;font-size:.9rem;font-weight:600;padding:7px 13px;border-radius:9px;transition:.18s}
+    .nav-links a:hover{color:var(--text);background:rgba(120,140,255,.08)}
+    .nav-links a.cta{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;box-shadow:0 4px 18px rgba(108,140,255,.35)}
+    .hero{padding:92px 0 64px;text-align:center}
+    .hero .badge{display:inline-block;border:1px solid var(--line-strong);border-radius:999px;padding:6px 16px;font-size:.8rem;color:var(--muted);background:rgba(120,140,255,.06);margin-bottom:26px}
+    .hero h1{font-size:clamp(2.4rem,5.5vw,4rem);font-weight:850;letter-spacing:-1.4px;line-height:1.07;margin-bottom:20px}
+    .grad{background:linear-gradient(92deg,var(--accent3),var(--accent) 45%,var(--accent2));background-size:200% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:gs 7s ease infinite}
+    @keyframes gs{0%,100%{background-position:0 50%}50%{background-position:100% 50%}}
+    .hero p.lead{color:var(--muted);font-size:1.13rem;max-width:640px;margin:0 auto 34px}
+    .btn{display:inline-flex;align-items:center;gap:8px;padding:13px 25px;border-radius:12px;font-weight:700;font-size:.96rem;text-decoration:none;transition:.16s;border:1px solid transparent;cursor:pointer}
+    .btn-primary{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;box-shadow:0 8px 26px rgba(108,140,255,.38)}
+    .btn-primary:hover{transform:translateY(-2px);filter:brightness(1.1)}
+    .btn-ghost{background:rgba(120,140,255,.07);color:var(--text);border-color:var(--line-strong)}
+    .btn-ghost:hover{background:rgba(120,140,255,.14);transform:translateY(-2px)}
+    .actions{display:flex;gap:13px;justify-content:center;flex-wrap:wrap}
+    section{padding:64px 0}
+    h2.sec{font-size:1.9rem;font-weight:800;letter-spacing:-.5px;margin-bottom:9px}
+    p.sub{color:var(--muted);max-width:640px;margin-bottom:36px}
+    .grid{display:grid;gap:16px}
+    .g3{grid-template-columns:repeat(auto-fit,minmax(270px,1fr))}
+    .g2{grid-template-columns:repeat(auto-fit,minmax(320px,1fr))}
+    .card{background:var(--panel);border:1px solid var(--line);border-radius:15px;padding:24px;transition:.22s;backdrop-filter:blur(14px)}
+    .card:hover{transform:translateY(-4px);border-color:var(--line-strong);box-shadow:0 16px 38px rgba(0,0,0,.35)}
+    .card .icon{width:44px;height:44px;border-radius:11px;display:grid;place-items:center;font-size:1.3rem;margin-bottom:14px;background:linear-gradient(135deg,rgba(108,140,255,.18),rgba(154,108,255,.18));border:1px solid var(--line)}
+    .card h3{font-size:1.05rem;margin-bottom:7px}
+    .card p{color:var(--muted);font-size:.9rem;line-height:1.6}
+    .term{background:#0a0e1a;border:1px solid var(--line-strong);border-radius:14px;overflow:hidden;box-shadow:0 24px 60px rgba(0,0,0,.5);font-family:var(--mono);font-size:.83rem;max-width:760px;margin:0 auto}
+    .term-bar{display:flex;gap:7px;padding:12px 16px;background:rgba(120,140,255,.06);border-bottom:1px solid var(--line)}
+    .term-bar i{width:12px;height:12px;border-radius:50%}
+    .term-bar i:nth-child(1){background:#ff5f57}.term-bar i:nth-child(2){background:#febc2e}.term-bar i:nth-child(3){background:#28c840}
+    .term-body{padding:20px 22px;line-height:1.8;min-height:290px}
+    .t-cmd{color:var(--accent3)}.t-ok{color:var(--good)}.t-warn{color:var(--warn)}.t-bad{color:var(--bad)}.t-dim{color:var(--muted)}
+    .cursor{display:inline-block;width:8px;height:15px;background:var(--accent);vertical-align:text-bottom;animation:bl 1s steps(1) infinite}
+    @keyframes bl{50%{opacity:0}}
+    .two-col{display:grid;grid-template-columns:1fr 1fr;gap:26px;align-items:start}
+    .arch{background:rgba(0,0,0,.45);border:1px solid var(--line);border-radius:12px;padding:18px;overflow-x:auto;font-family:var(--mono);font-size:.8rem;line-height:1.65;color:#c9d4ff}
+    table{width:100%;border-collapse:collapse;margin:14px 0;font-size:.89rem}
+    th,td{padding:9px 12px;border:1px solid var(--line);text-align:left}
+    th{background:rgba(120,140,255,.07);color:var(--text)}td{color:var(--muted)}
+    code{font-family:var(--mono);font-size:.84em;background:rgba(108,140,255,.1);padding:2px 7px;border-radius:6px;color:var(--accent3)}
+    pre.code{background:rgba(0,0,0,.45);border:1px solid var(--line);border-radius:12px;padding:16px;overflow-x:auto;font-family:var(--mono);font-size:.8rem;line-height:1.6;margin:12px 0}
+    pre.code code{background:none;padding:0;color:#c9d4ff}
+    .warnbox{border:1px solid rgba(255,210,77,.4);background:rgba(255,210,77,.07);border-radius:12px;padding:15px 18px;margin:14px 0;color:var(--warn);font-size:.92rem}
+    .dangerbox{border:1px solid rgba(255,92,122,.45);background:rgba(255,92,122,.07);border-radius:12px;padding:15px 18px;margin:14px 0;color:var(--bad);font-size:.92rem;line-height:1.65}
+    .tipbox{border:1px solid rgba(91,228,155,.4);background:rgba(91,228,155,.06);border-radius:12px;padding:15px 18px;margin:14px 0;color:var(--good);font-size:.92rem}
+    .toc{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px;margin:18px 0 30px}
+    .toc a{color:var(--muted);text-decoration:none;font-size:.88rem;padding:8px 13px;border:1px solid var(--line);border-radius:9px;transition:.15s}
+    .toc a:hover{color:var(--text);border-color:var(--accent);background:rgba(108,140,255,.07)}
+    .docs h2{font-size:1.4rem;margin:40px 0 12px;scroll-margin-top:80px}
+    .docs h3{font-size:1.06rem;margin:22px 0 9px}
+    .docs p,.docs li{color:var(--muted);font-size:.94rem;line-height:1.7}
+    .docs ul,.docs ol{padding-left:22px;margin:9px 0}
+    .pill{display:inline-block;padding:2px 10px;border-radius:999px;font-size:.74rem;font-weight:750}
+    .pill.yes{background:rgba(91,228,155,.14);color:var(--good)}
+    .pill.no{background:rgba(255,92,122,.14);color:var(--bad)}
+    footer{border-top:1px solid var(--line);padding:38px 0 54px;margin-top:50px;color:var(--muted);font-size:.86rem}
+    .foot-inner{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;align-items:center}
+    .foot-inner a{color:var(--muted);text-decoration:none;margin-left:18px}
+    .foot-inner a:hover{color:var(--text)}
+    @media(max-width:860px){.two-col{grid-template-columns:1fr}.nav-links a:not(.cta){display:none}}
+  </style>
+</head>
+<body>
+  <div class="aurora"></div>
+
+  <nav>
+    <div class="container nav-inner">
+      <a class="brand" href="#">🛡 Mail<em>Forge</em></a>
+      <div class="nav-links">
+        <a href="#caracteristicas">Características</a>
+        <a href="#arquitectura">Arquitectura</a>
+        <a href="#instalacion">Instalación</a>
+        <a href="#docs">Documentación</a>
+        <a class="cta" href="https://github.com/D1se0/emailSpoofingTool">GitHub ↗</a>
+      </div>
+    </div>
+  </nav>
+
+  <header class="hero">
+    <div class="container">
+      <div class="badge">🛡 open-source · MIT · v1.1.0</div>
+      <h1>Tu dominio de email,<br /><span class="grad">imposible de suplantar.</span></h1>
+      <p class="lead">
+        MailForge analiza SPF, DKIM, DMARC, DNSSEC y MTA-STS de cualquier dominio,
+        simula 8 vectores de ataque de spoofing y genera la configuración exacta
+        para blindarlo. <b>100% defensivo</b>: el análisis nunca envía correos.
+      </p>
+      <div class="actions">
+        <a class="btn btn-primary" href="https://github.com/D1se0/emailSpoofingTool/archive/refs/heads/main.zip">⬇ Descargar v1.1.0</a>
+        <a class="btn btn-ghost" href="#docs">📚 Leer documentación</a>
+      </div>
+    </div>
+  </header>
+
+  <section id="caracteristicas" class="container">
+    <h2 class="sec">Qué hace</h2>
+    <p class="sub">Motor de análisis 100% read-only sobre DNS público + simulación de amenazas + generador de defensas.</p>
+    <div class="grid g3">
+      <div class="card"><div class="icon">🧭</div><h3>Descubrimiento DNS total</h3><p>SPF (incluye redirect), DKIM con caza de ~60 selectores y CNAMEs, DMARC con dominio organizacional, DNSSEC vía DS, MTA-STS, TLS-RPT y BIMI.</p></div>
+      <div class="card"><div class="icon">🧮</div><h3>Scoring ponderado 0–100</h3><p>Puntúa cada control con pesos realistas y resume tu exposición en un grado A–F con desglose por pilar.</p></div>
+      <div class="card"><div class="icon">⚔️</div><h3>8 vectores simulados</h3><p>Spoof directo, escape por subdominios, replay DKIM, lookalike, bounces nulos, downgrade TLS… con probabilidad y mitigación.</p></div>
+      <div class="card"><div class="icon">🎭</div><h3>Spoof Lab</h3><p>Genera el mensaje suplantado que un atacante crearía contra tu dominio, predice el veredicto y te da los comandos para inyectarlo tú desde tu relay hacia un buzón tuyo.</p></div>
+      <div class="card"><div class="icon">🛠</div><h3>Hardening en 1 click</h3><p>Registros SPF/DMARC/MTA-STS/TLS-RPT listos para producción, config Postfix+OpenDKIM y guía de rotación DKIM.</p></div>
+      <div class="card"><div class="icon">✉️</div><h3>Self-test autorizado</h3><p>Un email de prueba a un buzón de TU dominio, marcado con cabeceras de test, para ver los fallos en tus informes DMARC.</p></div>
+    </div>
+  </section>
+
+  <section class="container">
+    <h2 class="sec" style="text-align:center">Así se ve</h2>
+    <div class="term" id="term">
+      <div class="term-bar"><i></i><i></i><i></i></div>
+      <div class="term-body" id="termBody"></div>
+    </div>
+  </section>
+
+  <section id="arquitectura" class="container">
+    <h2 class="sec">Arquitectura</h2>
+    <p class="sub">Dos piezas separadas: la <b>consola local</b> (motor + web de testeo) y esta <b>web pública</b> puramente documental.</p>
+    <div class="two-col">
+      <pre class="arch">emailSpoofingTool/
+├── core/            # motor Python (stdlib puro)
+│   ├── dnsx.py      #   DNS UDP/TCP/DoH + DNSSEC
+│   ├── spf.py       #   parser RFC 7208 + redirect
+│   ├── dkim.py      #   caza selectores + crypto
+│   ├── dmarc.py     #   RFC 7489 + org-domain
+│   ├── _rsalite.py  #   RSA/Ed25519 verify-only
+│   ├── scorer.py    #   scoring + 8 vectores
+│   └── hardening.py #   defensas + Spoof Lab
+├── mailforge.py     # CLI interactiva (Rich)
+├── api.py           # puente JSON
+├── server/          # API Node (stdlib) :8787
+├── web/             # consola local React
+└── site/            # esta web pública (estática)</pre>
+      <div>
+        <div class="card" style="margin-bottom:16px">
+          <h3>🖥 Consola local <span class="pill yes">motor completo</span></h3>
+          <p>Analyzer en vivo, Spoof Lab, Hardening y Self-test conectados al motor Python. Requiere backend.</p>
+          <pre class="code" style="margin:12px 0 0">cd server && npm install && npm start
+# → http://localhost:8787</pre>
+        </div>
+        <div class="card">
+          <h3>🌐 Web pública <span class="pill no">sin backend</span></h3>
+          <p>Esta página (GitHub Pages): documentación, arquitectura, RFCs y descargas. Cero llamadas a APIs, cero datos.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="instalacion" class="container">
+    <h2 class="sec">Instalación en 60 segundos</h2>
+    <p class="sub">Python 3.9+ para la CLI. Node 18+ solo si quieres la consola web local.</p>
+    <pre class="code">git clone https://github.com/D1se0/emailSpoofingTool.git
+cd emailSpoofingTool
+pip3 install -r requirements.txt
+
+# CLI interactiva (recomendado)
+./mailforge.sh                 # Linux/macOS
+mailforge.bat                  # Windows
+
+# Consola web local (opcional)
+cd server && npm install && npm start   # → http://localhost:8787</pre>
+  </section>
+
+  <section id="docs" class="container docs">
+    <h2 class="sec">📚 Documentación</h2>
+    <p class="sub">Guía completa: modelo de scoring, vectores, RFCs cubiertos y recetas.</p>
+    <div class="toc">
+      <a href="#d-que">¿Qué es?</a>
+      <a href="#d-legal">Uso legítimo</a>
+      <a href="#d-cli">Referencia CLI</a>
+      <a href="#d-spooflab">Spoof Lab</a>
+      <a href="#d-scoring">Modelo de scoring</a>
+      <a href="#d-vectores">Vectores de ataque</a>
+      <a href="#d-controles">SPF·DKIM·DMARC</a>
+      <a href="#d-rollout">Rollout DMARC</a>
+      <a href="#d-api">API local</a>
+      <a href="#d-faq">FAQ</a>
+    </div>
+
+    <h2 id="d-que">¿Qué es MailForge?</h2>
+    <p>Una <b>suite defensiva anti-spoofing</b>: audita qué tan fácil es suplantar un dominio de email y genera la configuración para evitarlo. Cubre <code>SPF (RFC 7208)</code>, <code>DKIM (RFC 6376)</code>, <code>DMARC (RFC 7489)</code>, <code>DNSSEC</code>, <code>MTA-STS (RFC 8460)</code> y <code>TLS-RPT</code>. El core es Python stdlib puro: sin dependencias obligatorias, con cliente DNS propio y fallback a DNS-over-HTTPS.</p>
+    <div class="tipbox">💡 <b>Dos webs, dos propósitos:</b> esta página es documentación pública estática; la <b>consola de testeo</b> (analyzer, Spoof Lab, hardening) corre en local con <code>npm start</code> en <code>server/</code> y habla con el motor real.</div>
+
+    <h2 id="d-legal">Uso legítimo</h2>
+    <div class="dangerbox">
+      ⚠ MailForge <b>no es una herramienta de phishing</b>. El análisis es 100% pasivo (DNS público) y nunca envía correos. Las dos funciones ofensivas-asistidas están cerradas:<br /><br />
+      ✅ <b>Spoof Lab</b>: genera el mensaje de drill + comandos — <b>tú</b> lo inyectas desde <b>tu relay</b> hacia <b>un buzón tuyo</b> del dominio analizado.<br />
+      ✅ <b>Self-test</b>: un único email técnico a un buzón del dominio analizado.<br />
+      ❌ Ningún envío a terceros, ningún dominio ajeno, nunca.
+    </div>
+    <p>Usarlo contra dominios que no controlas para algo distinto de una consulta DNS pública (que es lo que hace cualquier <code>dig</code>) viola la licencia de uso.</p>
+
+    <h2 id="d-cli">Referencia CLI</h2>
+    <pre class="code"><code>python3 mailforge.py analyze &lt;dominio&gt;       # análisis completo + score
+python3 mailforge.py dkim &lt;dominio&gt; [sel…]   # caza de selectores DKIM
+python3 mailforge.py spooftest &lt;dom&gt; [motivo] # drill red-team (sin envío)
+python3 mailforge.py harden &lt;dominio&gt;        # registros DNS + config
+python3 mailforge.py rollout &lt;dominio&gt;       # plan DMARC por fases
+python3 mailforge.py selftest &lt;dom&gt; &lt;to&gt;     # email de prueba autorizado
+python3 mailforge.py report &lt;dominio&gt; html   # informe HTML/JSON
+python3 mailforge.py watch &lt;dominio&gt; 60      # monitorización continua
+python3 mailforge.py                         # modo interactivo</code></pre>
+
+    <h2 id="d-spooflab">Spoof Lab — la perspectiva del atacante</h2>
+    <p>El módulo que responde a la pregunta: <i>"¿un atacante real conseguiría suplantarme?"</i>. Funciona en 3 pasos:</p>
+    <ol>
+      <li><b>Render</b> — construye el email suplantado realista (<code>From: "CEO (aviso urgente)" &lt;ceo@tudominio&gt;</code>, Reply-To secuestrado, motivo de ingeniería social: factura, contraseña o bonus).</li>
+      <li><b>Predicción</b> — consulta tu postura DNS en vivo y predice el veredicto: <span class="pill no">INBOX = suplantable</span> <span class="pill no" style="background:rgba(255,210,77,.14);color:var(--warn)">cuarentena</span> <span class="pill yes">RECHAZADO 550</span>.</li>
+      <li><b>Inyección (tú)</b> — copia los comandos <code>swaks</code>/<code>sendmail</code> y lanza el drill desde tu relay hacia tu buzón. Observa: ¿inbox, spam o rechazo? Y revisa <code>Authentication-Results</code> y el informe rua del día.</li>
+    </ol>
+    <div class="warnbox">⚠ El motor <b>nunca</b> se conecta al MX de destino para este drill: los comandos apuntan a un relay autorizado por ti. Es la misma filosofía de un pentest interno: el explotación la ejecuta el operador autorizado.</div>
+
+    <h2 id="d-scoring">Modelo de scoring</h2>
+    <pre class="code"><code>score = 0.20·SPF + 0.10·DKIM + 0.40·DMARC + 0.10·DNSSEC + 0.10·TLS + 0.10·Extras</code></pre>
+    <table>
+      <thead><tr><th>Pilar</th><th>Peso</th><th>Qué puntúa</th></tr></thead>
+      <tbody>
+        <tr><td>DMARC</td><td>40%</td><td>política efectiva (p/sp), pct, alineación estricta, rua</td></tr>
+        <tr><td>SPF</td><td>20%</td><td>presencia, mecanismo all, errores, límite 10 lookups, ptr</td></tr>
+        <tr><td>DKIM</td><td>10%</td><td>claves activas, fuerza ≥2048 bits, revocadas, wildcards</td></tr>
+        <tr><td>DNSSEC</td><td>10%</td><td>DS en zona padre / AD bit / RRSIG</td></tr>
+        <tr><td>TLS</td><td>10%</td><td>STARTTLS real contra tus MX + MTA-STS + TLS-RPT</td></tr>
+        <tr><td>Extras</td><td>10%</td><td>MTA-STS, TLS-RPT, BIMI</td></tr>
+      </tbody>
+    </table>
+    <p>Grados: <code>A ≥ 85</code> · <code>B ≥ 70</code> · <code>C ≥ 50</code> · <code>D ≥ 25</code> · <code>F &lt; 25</code>.</p>
+
+    <h2 id="d-vectores">Los 8 vectores de ataque</h2>
+    <ol>
+      <li><b>Spoof directo</b> — From desalineado con dominio propio del atacante (mitiga: DMARC).</li>
+      <li><b>Spoof exacto</b> — MAIL FROM en tu dominio desde IP ajena (mitiga: SPF <code>-all</code>).</li>
+      <li><b>Lookalike</b> — typosquat/homoglifo (mitiga: marca, BIMI, formación).</li>
+      <li><b>Replay DKIM</b> — reenvío de mensaje firmado (mitiga: reject, h= completo).</li>
+      <li><b>Bounces nulos</b> — abuso de MAIL FROM:&lt;&gt; (mitiga: alineación + reject).</li>
+      <li><b>Escape por subdominio</b> — sin política heredada (mitiga: <code>sp=reject</code>).</li>
+      <li><b>Display-name</b> — "CEO &lt;atacante@evil&gt;" (mitiga: BIMI, formación).</li>
+      <li><b>Downgrade STARTTLS</b> — MITM sin MTA-STS/DANE (mitiga: MTA-STS enforce).</li>
+    </ol>
+
+    <h2 id="d-controles">SPF · DKIM · DMARC en 60 segundos</h2>
+    <ul>
+      <li><b>SPF</b> autoriza <i>qué servidores</i> envían por tu dominio (MAIL FROM). Termina siempre en <code>-all</code>.</li>
+      <li><b>DKIM</b> firma el correo; la clave pública vive en <code>selector._domainkey</code>.</li>
+      <li><b>DMARC</b> exige que SPF o DKIM pasen <i>y</i> estén alineados con el From visible; define la acción al fallar y a dónde reportar.</li>
+    </ul>
+
+    <h2 id="d-rollout">Rollout DMARC por fases</h2>
+    <pre class="code"><code>FASE 0   p=none; rua=mailto:…        2-4 semanas: recopilar informes
+FASE 1   p=quarantine; pct=25        25% de fallos a spam
+FASE 2   p=quarantine; pct=100       si no hay falsos positivos
+FASE 3   p=reject; sp=reject; adkim=s; aspf=s   estado final
+FASE 4   + MTA-STS enforce + TLS-RPT + BIMI</code></pre>
+
+    <h2 id="d-api">API local (consola)</h2>
+    <table>
+      <thead><tr><th>Endpoint</th><th>Método</th><th>Descripción</th></tr></thead>
+      <tbody>
+        <tr><td><code>/api/health</code></td><td>GET</td><td>estado + versión de Python</td></tr>
+        <tr><td><code>/api/analyze?domain=</code></td><td>GET</td><td>análisis completo (JSON)</td></tr>
+        <tr><td><code>/api/dkim?domain=</code></td><td>GET</td><td>caza de selectores</td></tr>
+        <tr><td><code>/api/spooftest?domain=&amp;motif=</code></td><td>GET</td><td>drill del Spoof Lab (mensaje + comandos + veredicto)</td></tr>
+        <tr><td><code>/api/harden?domain=&amp;ips=&amp;selector=&amp;policy=</code></td><td>GET</td><td>genera registros/configs</td></tr>
+        <tr><td><code>/api/rollout?domain=</code></td><td>GET</td><td>plan DMARC por fases</td></tr>
+        <tr><td><code>/api/selftest</code></td><td>POST</td><td><code>{domain, to, dry_run}</code> — solo in-domain (403 si no)</td></tr>
+        <tr><td><code>/api/verify</code></td><td>POST</td><td><code>{raw}</code> verifica firmas DKIM de un email pegado</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="d-faq">FAQ</h2>
+    <h3>¿Puedo escanear cualquier dominio?</h3>
+    <p>Sí: son consultas DNS públicas y pasivas, como <code>dig</code>. La ética dicta actuar (inyectar drills, hardening) solo sobre dominios propios.</p>
+    <h3>¿Guardáis datos?</h3>
+    <p>No. Todo es stateless, sin base de datos ni telemetría. La web pública ni siquiera tiene backend.</p>
+    <h3>¿Por qué el Analyzer de la web pública no funciona?</h3>
+    <p>Porque esta página es <b>solo documentación</b> (estática, en Pages). El análisis interactivo está en la <b>consola local</b>: <code>cd server && npm start</code>.</p>
+    <h3>¿Funciona tras un firewall que bloquea el puerto 53?</h3>
+    <p>Sí: el core cae automáticamente a DNS-over-HTTPS (dns.google / Cloudflare).</p>
+    <h3>¿El Spoof Lab puede usarme a mí de víctima sin querer?</h3>
+    <p>No: valida que el buzón destino sea del dominio analizado y los comandos requieren tu relay y tu acción explícita.</p>
+  </section>
+
+  <footer>
+    <div class="container foot-inner">
+      <div>🛡 <b>MailForge</b> — suite defensiva anti-spoofing · MIT</div>
+      <div>
+        <a href="https://github.com/D1se0/emailSpoofingTool">GitHub</a>
+        <a href="https://github.com/D1se0/emailSpoofingTool/releases">Releases</a>
+        <a href="https://github.com/D1se0/emailSpoofingTool/blob/main/docs.md">docs.md</a>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    // Terminal animada (informativa, sin backend)
+    const LINES = [
+      ["t-dim", "$ mailforge analyze midominio.com"],
+      ["t-cmd", "→ Resolviendo SPF · DKIM · DMARC · DNSSEC · MTA-STS…"],
+      ["t-ok",  "✔ SPF        v=spf1 … -all            100/100"],
+      ["t-ok",  "✔ DMARC      p=reject adkim=s aspf=s   92/100"],
+      ["t-warn", "⚠ DKIM       selector2 (1024 bits)     45/100"],
+      ["t-bad",  "✖ DNSSEC     zona sin firmar            0/100"],
+      ["t-dim", "─────────────────────────────────────────────"],
+      ["t-bad", "SCORE 41/100 · Grado D — Vulnerable"],
+      ["t-warn", "→ 3 vectores viables · Spoof Lab: 'INBOX si p=none'"],
+      ["t-ok",  "→ harden genera tus registros en 1 comando"],
+    ];
+    let n = 0;
+    const body = document.getElementById("termBody");
+    (function tick() {
+      if (n >= LINES.length) return;
+      const [cls, txt] = LINES[n++];
+      const div = document.createElement("div");
+      div.className = cls;
+      div.textContent = txt;
+      body.appendChild(div);
+      setTimeout(tick, n === 1 ? 500 : 600);
+    })();
+  </script>
+</body>
+</html>

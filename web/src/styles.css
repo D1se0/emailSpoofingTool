@@ -350,6 +350,13 @@ footer {
 .foot-inner a:hover { color: var(--text); }
 
 /* ── misc ──────────────────────────────────────────────────────── */
+.local-badge {
+  font-size: 0.72rem; font-weight: 700; letter-spacing: 0.4px;
+  color: var(--good); background: rgba(91,228,155,0.1);
+  border: 1px solid rgba(91,228,155,0.3); border-radius: 999px;
+  padding: 4px 10px; white-space: nowrap;
+}
+
 .spinner {
   width: 17px; height: 17px; border-radius: 50%; display: inline-block;
   border: 2px solid rgba(255,255,255,0.25); border-top-color: #fff;

@@ -33,10 +33,14 @@ jobs:
 
       - name: Extract release notes
         run: |
-          if [ -f .github/RELEASE_NOTES_v1.0.0.md ]; then
+          TAG="${{ steps.tag.outputs.TAG }}"
+          NOTES_FILE=".github/RELEASE_NOTES_${TAG}.md"
+          if [ -f "$NOTES_FILE" ]; then
+            cp "$NOTES_FILE" body.md
+          elif [ -f .github/RELEASE_NOTES_v1.0.0.md ] && [ "$TAG" = "v1.0.0" ]; then
             cp .github/RELEASE_NOTES_v1.0.0.md body.md
           else
-            echo "## MailForge ${{ steps.tag.outputs.TAG }}" > body.md
+            echo "## MailForge $TAG" > body.md
             echo "See CHANGELOG and README for details." >> body.md
           fi
           echo "" >> body.md

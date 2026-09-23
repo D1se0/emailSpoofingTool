@@ -17,7 +17,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from core import dkim, scorer, hardening  # noqa: E402
+from core import dkim, dmarc, spf, scorer, hardening  # noqa: E402
 
 JSON_PREFIX = "##JSON##"
 
@@ -100,6 +100,40 @@ def main() -> None:
                 domain, to,
                 smtp_host=(payload.get("smtp_host") or ""),
                 dry_run=bool(payload.get("dry_run"))))
+
+        elif action == "spooftest":
+            domain = (payload.get("domain") or "").lower().strip()
+            if not _valid_domain(domain):
+                return emit({"error": "invalid domain"})
+            to = (payload.get("to") or f"tu-buzon@{domain}").lower().strip()
+            if _out_of_domain_guard(domain, to):
+                return emit({"error": "recipient outside analyzed domain",
+                             "detail": "el Spoof Lab solo apunta a buzones del dominio analizado"})
+            preview = hardening.build_spoof_preview(
+                domain,
+                exec_name=(payload.get("exec_name") or "CEO").strip()[:60],
+                motif=(payload.get("motif") or "invoice").strip()[:20])
+            # Verdict prediction from LIVE posture (best-effort, offline-safe).
+            verdict, basis = "desconocido", []
+            try:
+                drec, _e = dmarc.fetch_dmarc(domain)
+                srec, _c, _e2 = spf.fetch_spf(domain)
+                pol = drec.effective_policy() if drec else "missing"
+                basis.append(f"DMARC p={pol}")
+                basis.append(f"SPF all={srec.all_policy if srec else 'ausente'}")
+                verdict = {"reject": "RECHAZADO (550) — p=reject activo",
+                           "quarantine": "CUARENTENA/SPAM — p=quarantine activo",
+                           "none": "BANDEJA DE ENTRADA — dominio suplantable ❗",
+                           "missing": "BANDEJA DE ENTRADA — sin DMARC ❗"}.get(pol,
+                           "indeterminado")
+            except Exception as exc:
+                basis.append(f"postura no disponible: {exc}")
+            emit({"domain": domain, "to": to,
+                  "message": preview["message"],
+                  "profile": preview["profile"],
+                  "predicted_verdict": verdict,
+                  "posture_basis": basis,
+                  "commands": hardening.generate_injection_commands(domain, to)})
 
         elif action == "verify":
             raw = payload.get("raw") or ""

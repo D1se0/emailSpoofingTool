@@ -346,6 +346,38 @@ class TestHardening:
         assert out["dry_run"] is True
         assert "SELF-TEST" in out["message"]
 
+    def test_spoof_preview_forged_headers(self):
+        out = hardening.build_spoof_preview("x.com", exec_name="CFO", motif="invoice")
+        msg = out["message"]
+        assert '"CFO (aviso urgente)" <cfo@x.com>' in msg
+        assert "Reply-To:" in msg and "mailforge.example.net" in msg
+        assert "attacker-relay.example.net" in msg          # envelope externo
+        assert "X-Mailer: MailForge-SpoofLab" in msg        # marcado de drill
+        assert out["profile"]["spf_will_be"].startswith("fail")
+
+    def test_spoof_preview_motifs(self):
+        for motif, needle in (("invoice", "Factura"),
+                              ("password", "contraseña"),
+                              ("giftcard", "bonus")):
+            out = hardening.build_spoof_preview("x.com", motif=motif)
+            assert needle.lower() in out["message"].lower()
+
+    def test_injection_commands_reference_own_relay(self):
+        cmds = hardening.generate_injection_commands("x.com", "me@x.com")
+        assert "swaks" in cmds and "sendmail" in cmds
+        assert "me@x.com" in cmds
+        assert "NO uses el MX" in cmds                      # advertencia explícita
+
+    def test_api_spooftest_guard(self):
+        import json as _json, subprocess as _sp, sys as _sys
+        r = _sp.run([_sys.executable, "api.py", "spooftest",
+                     _json.dumps({"domain": "x.com", "to": "victim@other.com"})],
+                    capture_output=True, text=True, cwd=os.path.dirname(
+                        os.path.dirname(os.path.abspath(__file__))))
+        line = next((l for l in r.stdout.splitlines() if l.startswith("##JSON##")), "")
+        out = _json.loads(line[8:]) if line else {}
+        assert "outside" in out.get("error", "")
+
 
 # ---------------------------------------------------------------------------
 # Network tests (marked; skipped with -m "not network")

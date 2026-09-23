@@ -195,6 +195,17 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, data);
     }
 
+    if (pathname === "/api/spooftest") {
+      const domain = (parsed.query.domain || "").toString().toLowerCase().trim();
+      if (!validDomain(domain)) return send(res, 400, { error: "invalid domain" });
+      const motif = (parsed.query.motif || "invoice").toString()
+        .replace(/[^a-z]/g, "").slice(0, 20) || "invoice";
+      const to = (parsed.query.to || "").toString().toLowerCase().trim();
+      const data = await callCore("spooftest",
+        { domain, motif, to: to || undefined });
+      return send(res, 200, data);
+    }
+
     if (pathname === "/api/rollout") {
       const domain = (parsed.query.domain || "").toString().toLowerCase().trim();
       if (!validDomain(domain)) return send(res, 400, { error: "invalid domain" });

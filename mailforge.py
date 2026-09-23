@@ -379,6 +379,36 @@ def do_hardening(domain: str, ips=(), selector="s1", policy="reject"):
            border="blue")
 
 
+def do_spooftest(domain: str, to_addr: str = "", motif: str = "invoice"):
+    """Red-team drill: render spoofed message + injection commands (no send)."""
+    from core import dmarc as _dmarc, spf as _spf
+    preview = hardening.build_spoof_preview(domain, motif=motif)
+    to_addr = to_addr or f"tu-buzon@{domain}"
+
+    pol_label, pol_color = "desconocido", "dim"
+    try:
+        drec, _ = _dmarc.fetch_dmarc(domain)
+        pol = drec.effective_policy() if drec else "missing"
+        pol_label = {"reject": "RECHAZADO (550) — p=reject funciona",
+                     "quarantine": "CUARENTENA/SPAM — p=quarantine",
+                     "none": "BANDEJA DE ENTRADA — suplantable ❗",
+                     "missing": "BANDEJA DE ENTRADA — sin DMARC ❗"}.get(pol, pol)
+        pol_color = {"reject": "green", "quarantine": "yellow",
+                     "none": "red", "missing": "red"}.get(pol, "dim")
+    except Exception:
+        pol = None
+
+    _panel(f"Mensaje suplantado (drill) — {domain}", Text(preview["message"][:900]),
+           border="red")
+    if RICH:
+        console.print(f"  Veredicto previsto: [bold {pol_color}]{pol_label}[/]")
+    else:
+        print(f"  Veredicto previsto: {pol_label}")
+    _panel("Comandos de inyección (tú ejecutas, desde TU relay)",
+           Text(hardening.generate_injection_commands(domain, to_addr)),
+           border="yellow")
+
+
 def do_selftest(domain: str, to_addr: str, dry=False):
     res = hardening.send_selftest(domain, to_addr, dry_run=dry)
     if res.get("dry_run"):
@@ -472,6 +502,7 @@ def interactive_repl() -> None:
   [bold]harden[/] <dominio>         genera registros/configs
   [bold]rollout[/] <dominio>        plan DMARC por fases
   [bold]selftest[/] <dom> <to>      email de prueba autorizado (in-domain)
+  [bold]spooftest[/] <dom> [motivo] drill red-team: mensaje + comandos (sin envío)
   [bold]report[/] <dominio> [json|html]  guarda informe
   [bold]watch[/] <dominio> [seg]    monitorización continua
   [bold]config[/]  ·  [bold]about[/]  ·  [bold]quit[/]""")
@@ -489,6 +520,9 @@ def interactive_repl() -> None:
         elif cmd == "harden":
             if args:
                 do_hardening(args[0])
+        elif cmd == "spooftest":
+            if args:
+                do_spooftest(args[0], motif=args[1] if len(args) > 1 else "invoice")
         elif cmd == "selftest":
             if len(args) >= 2:
                 if RICH:
@@ -552,6 +586,9 @@ def main() -> None:
         do_dkim_hunt(args[0], selectors=args[1:])
     elif cmd == "harden":
         do_hardening(args[0])
+    elif cmd == "spooftest":
+        do_spooftest(args[0] if args else "example.com",
+                     motif=args[1] if len(args) > 1 else "invoice")
     elif cmd == "selftest":
         if len(args) < 2:
             console.print("uso: selftest <dominio> <buzon@dominio>")

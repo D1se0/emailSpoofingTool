@@ -29,7 +29,7 @@ async function api(path, opts) {
     res = await fetch(path, opts);
     data = await res.json();
   } catch (_) {
-    throw new Error("API no disponible — en GitHub Pages solo corre el front: " +
+    throw new Error("API no disponible — esta consola necesita el backend local: " +
       "ejecuta `cd server && npm start` y abre http://localhost:8787");
   }
   if (!res.ok || data.error) throw new Error(data.error || `HTTP ${res.status}`);
@@ -47,6 +47,7 @@ function Nav({ route }) {
   const links = [
     ["/", "Inicio"],
     ["/analyzer", "Analyzer"],
+    ["/spooflab", "Spoof Lab"],
     ["/harden", "Hardening"],
     ["/docs", "Docs"],
   ];
@@ -64,6 +65,7 @@ function Nav({ route }) {
             </a>
           ))}
           <a className="nav-cta" href="#/analyzer">Escanear ahora</a>
+          <span className="local-badge" title="Consola local conectada al motor">🖥 modo local</span>
         </div>
       </div>
     </nav>
@@ -228,6 +230,115 @@ function Landing() {
         <a className="btn btn-primary" href="#/analyzer">Analizar ahora →</a>
       </section>
     </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Spoof Lab page — red-team drill preview (no send)
+// ─────────────────────────────────────────────────────────────────
+const MOTIFS = [
+  ["invoice", "💳 Factura urgente"],
+  ["password", "🔐 Contraseña expirada"],
+  ["giftcard", "🎁 Bonus / giftcard"],
+];
+
+function SpoofLab() {
+  const [domain, setDomain] = useState("");
+  const [motif, setMotif] = useState("invoice");
+  const [execName, setExecName] = useState("CEO");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [data, setData] = useState(null);
+
+  const run = async (e) => {
+    e && e.preventDefault();
+    if (!domain.trim()) return;
+    setLoading(true); setError(""); setData(null);
+    try {
+      const qs = `?domain=${encodeURIComponent(domain.trim().toLowerCase())}&motif=${motif}&exec_name=${encodeURIComponent(execName || "CEO")}`;
+      setData(await api(`/api/spooftest${qs}`));
+    } catch (err) { setError(err.message); } finally { setLoading(false); }
+  };
+
+  const verdictColor = (v) => v.includes("RECHAZADO") ? "var(--good)"
+    : v.includes("CUARENTENA") ? "var(--warn)" : "var(--bad)";
+
+  return (
+    <section className="container section">
+      <h2 className="section-title">🎭 Spoof Lab</h2>
+      <p className="section-sub">
+        Genera el <b>mensaje suplantado</b> que un atacante real crearía contra tu
+        dominio, predice el veredicto según tu postura DNS y te da los comandos
+        para <b>inyectarlo tú</b> desde tu propio relay hacia un buzón tuyo.
+        MailForge <b>nunca envía nada</b>: el disparador eres tú.
+      </p>
+      <div className="warnbox" style={{ border: "1px solid rgba(255,92,122,0.4)", background: "rgba(255,92,122,0.06)", color: "var(--bad)", borderRadius: 12, padding: "14px 18px", marginBottom: 24, fontSize: "0.9rem", lineHeight: 1.6 }}>
+        ⚠ Drill autorizado únicamente: apunta a un buzón <b>del dominio que analizas
+        y declaras tuyo</b>. Usar esto contra terceros es ilegal.
+      </div>
+
+      <form className="scan-box" onSubmit={run} style={{ maxWidth: 720 }}>
+        <input placeholder="midominio.com" value={domain} onChange={(e) => setDomain(e.target.value)} spellCheck={false} />
+        <button className="btn btn-primary" disabled={loading || !domain.trim()}>
+          {loading ? <span className="spinner" /> : "Generar drill"}
+        </button>
+      </form>
+
+      <div style={{ display: "flex", gap: 12, margin: "14px 0 26px", flexWrap: "wrap", alignItems: "center" }}>
+        <label style={{ color: "var(--muted)", fontSize: "0.88rem" }}>
+          Suplanta a:{" "}
+          <input value={execName} onChange={(e) => setExecName(e.target.value)}
+            style={{ background: "rgba(7,10,19,0.6)", border: "1px solid var(--line-strong)", color: "var(--text)", borderRadius: 8, padding: "7px 10px", width: 120, fontFamily: "var(--mono)" }} />
+        </label>
+        <div style={{ display: "flex", gap: 6 }}>
+          {MOTIFS.map(([id, label]) => (
+            <button key={id} type="button" className={`btn btn-sm ${motif === id ? "btn-primary" : "btn-ghost"}`}
+              onClick={() => setMotif(id)}>{label}</button>
+          ))}
+        </div>
+      </div>
+
+      {error && <div className="err-box">⚠ {error}</div>}
+
+      {data && (
+        <div className="fade-up">
+          <div className="card" style={{ borderLeft: `4px solid ${verdictColor(data.predicted_verdict)}` }}>
+            <h3>🔮 Veredicto previsto</h3>
+            <p style={{ fontSize: "1.25rem", fontWeight: 800, color: verdictColor(data.predicted_verdict), margin: "8px 0" }}>
+              {data.predicted_verdict}
+            </p>
+            <p style={{ color: "var(--muted)", fontSize: "0.85rem" }}>
+              Basado en: {data.posture_basis.join(" · ")}. El envío real lo haces tú con los
+              comandos de abajo y confirmas el resultado en tu bandeja.
+            </p>
+          </div>
+
+          <div className="card" style={{ marginTop: 18 }}>
+            <h3>✉️ Mensaje suplantado (vista previa .eml)</h3>
+            <pre style={{ fontSize: "0.78rem", overflowX: "auto", lineHeight: 1.6, background: "rgba(0,0,0,0.4)", padding: 16, borderRadius: 10 }}>{data.message}</pre>
+            <div style={{ marginTop: 12 }}>
+              <button className="btn btn-ghost btn-sm" onClick={() => navigator.clipboard && navigator.clipboard.writeText(data.message)}>📋 Copiar .eml</button>
+            </div>
+          </div>
+
+          <div className="card" style={{ marginTop: 18 }}>
+            <h3>🚀 Inyección desde tu relay</h3>
+            <pre style={{ fontSize: "0.78rem", overflowX: "auto", lineHeight: 1.6, whiteSpace: "pre-wrap", background: "rgba(0,0,0,0.4)", padding: 16, borderRadius: 10 }}>{data.commands}</pre>
+          </div>
+
+          <div className="card" style={{ marginTop: 18 }}>
+            <h3>🧬 Perfil del ataque simulado</h3>
+            <table className="vec-table">
+              <tbody>
+                {Object.entries(data.profile).map(([k, v]) => (
+                  <tr key={k}><td style={{ width: 180, fontWeight: 700 }}>{k}</td><td style={{ fontFamily: "var(--mono)", fontSize: "0.8rem" }}>{v}</td></tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -635,6 +746,7 @@ function App() {
   const params = new URLSearchParams(query || "");
   let page;
   if (path === "/analyzer") page = <Analyzer />;
+  else if (path === "/spooflab") page = <SpoofLab />;
   else if (path === "/harden") page = <Harden initialDomain={params.get("d") || ""} />;
   else if (path === "/docs") page = <Docs />;
   else page = <Landing />;

@@ -1,4 +1,4 @@
-name: Deploy web to GitHub Pages
+name: Deploy public site to GitHub Pages
 
 on:
   push:
@@ -20,35 +20,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Build web (React + esbuild)
-        working-directory: web
+      - name: Assemble static site (documentation only)
         run: |
-          npm install --no-audit --no-fund
-          mkdir -p build
-          cp src/index.html build/
-          cp src/styles.css build/app.css
-          npm run build
-
-      - name: Add SPA 404 fallback
-        working-directory: web/build
-        run: cp index.html 404.html
-
-      - name: Inject API notice banner for static hosting
-        working-directory: web/build
-        run: |
-          cat > api-notice.txt <<'EOF'
-          Modo estático (GitHub Pages): el Analyzer necesita la API local.
-          Ejecuta: cd server && npm start  →  http://localhost:8787
-          EOF
-          true
+          mkdir -p _pages
+          cp site/index.html _pages/
+          cp site/index.html _pages/404.html   # SPA-less fallback
 
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: web/build
+          path: _pages
 
   deploy:
     needs: build

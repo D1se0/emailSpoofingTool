@@ -182,6 +182,105 @@ def generate_rollout_plan(domain: str, rua: str = "") -> str:
 
 
 # --------------------------------------------------------------------------
+# Spoof Lab — RED-TEAM PREVIEW for the analyzed (owned) domain.
+#
+# This does NOT send anything. It renders a realistic spoofed message that a
+# real attacker would craft against YOUR domain, plus the exact commands for
+# the operator to inject it from THEIR OWN relay (swaks/sendmail) to a mailbox
+# THEY control. Purpose: observe with your own eyes whether your SPF/DKIM/DMARC
+# posture stops the attack (inbox vs quarantine vs reject).
+# --------------------------------------------------------------------------
+
+def build_spoof_preview(domain: str, exec_name: str = "CEO",
+                        exec_email: str = "", motif: str = "invoice") -> dict:
+    """Craft a would-be spoofing email against `domain` (red-team drill).
+    Returns the RFC5322 message, the attack profile and the verdict prediction
+    from the last known posture (caller passes posture for precision)."""
+    exec_email = exec_email or f"{exec_name.lower().replace(' ', '.')}@{domain}"
+    motifs = {
+        "invoice": ("URGENTE: Factura vencida #INV-8841 — pago hoy",
+                    "Adjunto la factura correspondiente. Por favor liquidar antes "
+                    "de las 18:00 para evitar recargo. Cualquier duda, respóndeme "
+                    "a este correo directamente.\n\n--\nDirección de Finanzas"),
+        "password": ("Alerta de seguridad: contraseña expirada",
+                     "Su contraseña corporativa expira hoy. Cambiéela desde el "
+                     "portal interno para evitar la suspensión de la cuenta."),
+        "giftcard": ("¡Felicidades! Has sido seleccionado para el bonus trimestral",
+                     "Enhorabuena: has sido elegido entre el personal para recibir "
+                     "el bonus de este trimestre. Confirma tus datos respondiendo "
+                     "a este mensaje antes de las 17:00."),
+    }
+    subject, body = motifs.get(motif, motifs["invoice"])
+
+    # Deliberately forged headers: external MTA, no DKIM, From inside domain.
+    spoofed = (
+        f"Received: from attacker-relay.example.net (unknown [203.0.113.66])\r\n"
+        f"\tby mx.{domain} with ESMTPS id DRILL-MESSAGE;\r\n"
+        f"\t{formatdate(localtime=False)}\r\n"
+        f"From: \"{exec_name} (aviso urgente)\" <{exec_email}>\r\n"
+        f"Reply-To: drill-collector@mailforge.example.net\r\n"
+        f"To: <tu-buzon@{domain}>\r\n"
+        f"Subject: {subject}\r\n"
+        f"Date: {formatdate(localtime=False)}\r\n"
+        f"Message-ID: <drill-{secrets.token_hex(6)}@attacker-relay.example.net>\r\n"
+        f"X-Mailer: MailForge-SpoofLab/1.0 (authorized drill)\r\n"
+        f"MIME-Version: 1.0\r\n"
+        f"Content-Type: text/plain; charset=utf-8\r\n"
+        f"\r\n"
+        f"{body}\r\n"
+    )
+
+    attack_profile = {
+        "envelope_from": f"bounce@attacker-relay.example.net",
+        "header_from": exec_email,
+        "spf_will_be": "fail (relay externo no está en tu SPF)",
+        "dkim_will_be": "none (sin firma)",
+        "dmarc_will_be": "fail (sin alineación)",
+        "technique": "display-name impersonation + Reply-To hijack",
+    }
+    return {"message": spoofed, "profile": attack_profile,
+            "domain": domain, "motif": motif}
+
+
+def generate_injection_commands(domain: str, to_addr: str,
+                                smtp_host: str = "") -> str:
+    """Exact commands for the operator to inject the drill message from
+    their own machine/relay. MailForge never connects to the target MX here."""
+    host = smtp_host or f"smtp.{domain}"
+    msg = build_spoof_preview(domain)["message"]
+    b64 = base64.b64encode(msg.encode()).decode()
+    return textwrap.dedent(f"""\
+    ══ Spoof Lab — inyección del drill (TODO corre de TU cuenta) ══
+
+    Objetivo : {to_addr}   (buzón tuyo del dominio {domain})
+    Reenviador: {host} — usa un relay AUTORIZADO para ti (propio, Mailtrap,
+                smtp2go de pruebas...). NO uses el MX de {domain} si no es tuyo.
+
+    ▸ Opción 1 — swaks (recomendado):
+        # guarda el mensaje:
+        echo '{b64}' | base64 -d > /tmp/spoof-drill.eml
+        swaks --to {to_addr} \\
+              --from bounce@attacker-relay.example.net \\
+              --server {host} \\
+              --body /tmp/spoof-drill.eml \\
+              --header 'X-MailForge-Drill: authorized'
+
+    ▸ Opción 2 — sendmail (relay local):
+        echo '{b64}' | base64 -d | sendmail -t -f bounce@attacker-relay.example.net
+
+    ▸ Qué observar después (en los 2 minutos siguientes):
+        1. ¿Inbox, spam o rechazado?     → eficacia del filtro
+        2. Authentication-Results:       → spf=fail dkim=none dmarc=fail
+        3. Informe rua del día:          → el drill aparecerá como fallo DMARC
+
+    ▸ Interpretación:
+        · Rechazado (550)      → p=reject funciona  ✅
+        · Cuarentena/spam      → p=quarantine o filtros parciales ⚠
+        · En INBOX             → TU DOMINIO ES SUPLANTABLE — aplica el hardening ❌
+    """)
+
+
+# --------------------------------------------------------------------------
 # Authorized self-test: send ONE marked email to an in-domain mailbox.
 # --------------------------------------------------------------------------
 
