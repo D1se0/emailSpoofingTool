@@ -130,6 +130,73 @@ $ python3 mailforge.py drill midominio.com jefe@midominio.com --yes
   ✅ Tu DMARC/SPF RECHAZÓ la suplantación (p=reject activo)
 ```
 
+### 4) **Compositor libre estilo emkei.cz** — campos From/To/Subject/Text/adjuntos 🧾
+
+```bash
+# Tu caso de uso exacto: tu dominio → tu buzón temporal, con adjunto y prioridad:
+$ python3 mailforge.py compose \
+    --from-name "CE0 Carlos Pérez" \
+    --from-email jefe@diseo.pntr.dev \
+    --to yvt0wp+77xiollatz23c@sharklasers.com \
+    --subject "URGENTE: Factura #4471 vencida" \
+    --text "Adjunto la factura pendiente de abono. Ruego su pago hoy mismo." \
+    --reply-to contabilidad@otro-correo.com \
+    --attach factura_4471.pdf --priority high \
+    --save drill.eml
+
+  ⚠ USO EN ENTORNO CONTROLADO: dirige este mensaje solo a buzones propios
+    o con consentimiento explícito (simulacros de phishing autorizados).
+
+  ✉ From: =?utf-8?q?CE0_Carlos_P=C3=A9rez?= <jefe@diseo.pntr.dev>
+     To: yvt0wp+77xiollatz23c@sharklasers.com
+     Subject: URGENTE: Factura #4471 vencida · prioridad high · 1 adjunto
+  💾 Guardado: drill.eml
+```
+
+```bash
+# Mínimo absoluto (3 flags):
+$ python3 mailforge.py compose \
+    --from-name "Soporte IT" --from-email soporte@midominio.com \
+    --to test@midominio.com --subject "Prueba" --text "Hola"
+```
+
+| Flag | Descripción |
+|---|---|
+| `--from-name` | nombre visible del remitente (RFC 2047, acentos OK) |
+| `--from-email` | dirección del remitente (el dominio define el Message-ID y el análisis) |
+| `--to` | destinatario — propio o buzón temporal de prueba |
+| `--subject` | asunto del correo |
+| `--text` | cuerpo / descripción |
+| `--reply-to` | *(opcional)* cabecera Reply-To distinta |
+| `--attach` | *(opcional, repetible)* ficheros reales adjuntos (máx 10) |
+| `--priority` | `high` · `normal` · `low` (X-Priority 1/3/5) |
+| `--relay` | *(opcional)* host SMTP que aparecerá en los comandos |
+| `--save` | guarda el `.eml` en disco (además de mostrarlo) |
+
+> En la **consola web local** (Spoof Lab) es un formulario completo: From Name, From E-mail,
+> To, Subject, Text, selector de ficheros + "Attach another file", prioridad y Reply-To.
+> Botón **⚡ Generar mensaje + comandos** → `.eml` descargable + comandos swaks/sendmail.
+> Si el destinatario pertenece al dominio del From, aparece además el botón de
+> **envío real automatizado** con transcripción SMTP y verificación IMAP.
+
+<details>
+<summary><b>¿Qué pasa cuando lo envías?</b></summary>
+
+El destino (p. ej. tu buzón temporal) recibe el mensaje con las cabeceras de suplantación.
+Al abrir las cabeceras verás el resultado real de los filtros del receptor, p. ej.:
+
+```
+Authentication-Results: mx.sharklasers.com;
+   spf=fail (sender IP is x.x.x.x) smtp.mailfrom=diseo.pntr.dev;
+   dkim=none (no signature); dmarc=none action=none header.from=diseo.pntr.dev
+```
+
+Ese `dmarc=none action=none` es exactamente la prueba de que el dominio es suplantable
+(sin DMARC, el mensaje entra). Tras aplicar `harden`, la misma prueba dará `dmarc=fail
+action=quarantine/reject` — el drill ahora es bloqueado.
+
+</details>
+
 <details>
 <summary><b>Todas las flags de <code>drill</code></b></summary>
 
@@ -147,7 +214,7 @@ La contraseña IMAP se pide por teclado o con `MAILFORGE_IMAP_PASS` (nunca se gu
 
 </details>
 
-### 4) Hardening + rollout
+### 5) Hardening + rollout
 
 ```bash
 $ python3 mailforge.py harden midominio.com
@@ -162,7 +229,7 @@ $ python3 mailforge.py harden midominio.com
 $ python3 mailforge.py rollout midominio.com   # plan none→quarantine→reject
 ```
 
-### 5) Resto de comandos
+### 6) Resto de comandos
 
 ```bash
 python3 mailforge.py dkim midominio.com facturacion marketing2024  # caza selectores

@@ -135,6 +135,32 @@ def main() -> None:
                   "posture_basis": basis,
                   "commands": hardening.generate_injection_commands(domain, to)})
 
+        elif action == "compose":
+            """Free-form spoof composer: any From/To/Subject/Text/attachments."""
+            out = hardening.compose_spoof_email(
+                from_name=(payload.get("from_name") or "").strip()[:120],
+                from_email=(payload.get("from_email") or "").strip()[:254],
+                to=(payload.get("to") or "").strip()[:254],
+                subject=(payload.get("subject") or "").strip()[:998],
+                text=str(payload.get("text") or "")[:100000],
+                reply_to=(payload.get("reply_to") or "").strip()[:254],
+                attachments=(payload.get("attachments") or [])[:10],
+                priority=(payload.get("priority") or "normal").strip()[:8])
+            out["commands"] = hardening.generate_freeform_commands(
+                from_email=(payload.get("from_email") or "").strip()[:254],
+                to=(payload.get("to") or "").strip()[:254],
+                from_name=(payload.get("from_name") or "").strip()[:120],
+                subject=(payload.get("subject") or "").strip()[:998],
+                text=str(payload.get("text") or "")[:100000],
+                reply_to=(payload.get("reply_to") or "").strip()[:254],
+                attachments=(payload.get("attachments") or [])[:10],
+                priority=(payload.get("priority") or "normal").strip()[:8],
+                smtp_host=(payload.get("smtp_host") or "").strip()[:253])
+            out["notice"] = ("⚠ USO EN ENTORNO CONTROLADO: dirige este mensaje "
+                             "solo a buzones propios o con consentimiento "
+                             "(simulacros de phishing autorizados).")
+            emit(out)
+
         elif action == "drill_send":
             domain = (payload.get("domain") or "").lower().strip()
             to = (payload.get("to") or "").lower().strip()

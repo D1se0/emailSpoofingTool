@@ -206,6 +206,153 @@ def _ascii_localpart(name: str) -> str:
     return re.sub(r"\.+", ".", cleaned).strip(".") or "ceo"
 
 
+# --------------------------------------------------------------------------
+# Spoof Lab — free-form composer (attacker-view drill).
+#
+# The operator fills the same fields a spoofing web-tool would expose (From
+# name, From email, To, Subject, Text, attachments...). MailForge adds the
+# disclosure banner and ONE pre-flight notice: "controlled environment / your
+# own domain". The automated send path keeps the in-domain guard; the manual
+# injection generator does not restrict recipients (the operator runs it).
+# --------------------------------------------------------------------------
+
+def compose_spoof_email(from_name: str = "", from_email: str = "",
+                        to: str = "", subject: str = "", text: str = "",
+                        reply_to: str = "", attachments: list = None,
+                        priority: str = "normal") -> dict:
+    """Build a fully configurable RFC 5322 message (MIME when attachments).
+
+    attachments: list of {filename, content_b64, mime?} — content is base64.
+    Returns {message, headers, has_attachments, warnings[]}.
+    """
+    warnings = []
+    from_name = (from_name or "").strip()
+    from_email = (from_email or "").strip()
+    to = (to or "").strip()
+    subject = (subject or "").strip() or "(sin asunto)"
+    text = text or ""
+    if not from_email:
+        warnings.append("sin From E-mail no se puede construir el mensaje")
+        return {"message": "", "headers": {}, "has_attachments": False,
+                "warnings": warnings}
+    if "@" not in to:
+        warnings.append("destinatario sin @ — comprueba el campo To")
+
+    # Encode ONLY the display name (RFC 2047) and keep the addr-spec raw;
+    # encoding the whole header (default) breaks address parsing in clients.
+    if from_name:
+        from email.header import Header
+        from email.utils import formataddr as _fa
+        disp_from = _fa((Header(from_name, "utf-8").encode(), from_email))
+    else:
+        disp_from = from_email
+
+    if attachments:
+        from email.mime.multipart import MIMEMultipart
+        from email.mime.text import MIMEText
+        from email.mime.application import MIMEApplication
+
+        mixed = MIMEMultipart()
+        mixed["From"] = disp_from
+        mixed["To"] = to
+        mixed["Subject"] = subject
+        mixed["Date"] = formatdate(localtime=False)
+        mixed["Message-ID"] = make_msgid(domain=(from_email.rsplit("@", 1)[-1]
+                                                 or "mailforge.local"))
+        mixed["X-Mailer"] = "MailForge-SpoofLab/1.2 (authorized drill)"
+        if reply_to:
+            mixed["Reply-To"] = reply_to
+        if priority in ("high", "low"):
+            mixed["X-Priority"] = "1" if priority == "high" else "5"
+            mixed["Importance"] = "High" if priority == "high" else "Low"
+        mixed.attach(MIMEText(text, "plain", "utf-8"))
+        for att in attachments[:10]:
+            try:
+                raw = base64.b64decode(att.get("content_b64", ""), validate=True)
+                part = MIMEApplication(raw)
+                part.add_header("Content-Disposition", "attachment",
+                                filename=(att.get("filename") or "attachment.bin")
+                                .replace("\r", "").replace("\n", ""))
+                if att.get("mime"):
+                    part.set_type(att["mime"])
+                mixed.attach(part)
+            except Exception as exc:
+                warnings.append(f"adjunto '{att.get('filename')}' omitido: {exc}")
+        return {"message": mixed.as_string(), "headers": dict(mixed.items()),
+                "has_attachments": True, "warnings": warnings}
+
+    # plain message (no MIME multiparts)
+    from email.mime.text import MIMEText as _MT
+    msg = _MT(text, "plain", "utf-8")
+    msg["From"] = disp_from
+    msg["To"] = to
+    msg["Subject"] = subject
+    msg["Date"] = formatdate(localtime=False)
+    msg["Message-ID"] = make_msgid(domain=(from_email.rsplit("@", 1)[-1]
+                                            or "mailforge.local"))
+    msg["X-Mailer"] = "MailForge-SpoofLab/1.2 (authorized drill)"
+    if reply_to:
+        msg["Reply-To"] = reply_to
+    if priority in ("high", "low"):
+        msg["X-Priority"] = "1" if priority == "high" else "5"
+        msg["Importance"] = "High" if priority == "high" else "Low"
+    return {"message": msg.as_string(), "headers": dict(msg.items()),
+            "has_attachments": False, "warnings": warnings}
+
+
+def generate_freeform_commands(from_email: str, to: str, from_name: str = "",
+                               subject: str = "", text: str = "",
+                               reply_to: str = "", attachments: list = None,
+                               priority: str = "normal",
+                               smtp_host: str = "") -> str:
+    """swaks/sendmail commands that implement exactly the composed message,
+    for the operator to run from their own machine/relay."""
+    composed = compose_spoof_email(from_name=from_name, from_email=from_email,
+                                   to=to, subject=subject, text=text,
+                                   reply_to=reply_to,
+                                   attachments=attachments, priority=priority)
+    b64 = base64.b64encode(composed["message"].encode()).decode()
+    server_arg = (f"--server {smtp_host} " if smtp_host else "")  # sin --server → MX del destinatario
+    reply_line = f"\n          --h-Reply-To: '{reply_to}' \\" if reply_to else ""
+    prio_flag = " --priority high" if priority == "high" else ""
+    att_note = (f"\n    · El mensaje lleva {len(attachments)} adjunto(s): con swaks "
+                f"se envían vía el .eml (Opción 2). Con la Opción 1, usa "
+                f"--attach @ruta-del-fichero") if attachments else ""
+    return textwrap.dedent(f"""\
+    ══ Spoof Lab — inyección manual (ejecútalo TÚ desde tu equipo) ══
+
+    From visible : {from_name or from_email} <{from_email}>
+    Envelope     : {from_email}
+    To           : {to}
+    Subject      : {subject}
+    Adjuntos     : {len(attachments or [])}
+    Ruta         : swaks entrega al MX del DESTINATARIO ({to.rsplit('@',1)[-1]}){att_note}
+
+    ▸ Opción 1 — swaks directo (cabeceras controladas):
+        swaks \\
+          --to '{to}' \\
+          --from '{from_email}' \\{prio_flag}
+          {server_arg}\\
+          --h-From: '{from_name or from_email} <{from_email}>' \\{reply_line}
+          --h-Subject: '{subject}' \\
+          --h-X-Mailer: 'MailForge-SpoofLab/1.2 (authorized drill)' \\
+          --body '{text[:180]}'
+
+    ▸ Opción 2 — mensaje .eml exacto (con adjuntos) + sendmail -t:
+        echo '{b64}' | base64 -d > /tmp/spoof-drill.eml
+        sendmail -t -f {from_email} < /tmp/spoof-drill.eml
+
+    ▸ Notas:
+        · El puerto 25 saliente suele estar bloqueado en conexiones domésticas
+          → VPS o relay autorizado (--server … --port 587).
+        · Marca 'X-Mailer: … (authorized drill)' identifica el drill — quítala
+          solo si sabes lo que haces.
+
+    ⚠ USO EN ENTORNO CONTROLADO: dirígete únicamente a buzones propios o de
+      personas que te hayan dado consentimiento (simulacros de phishing).
+    """)
+
+
 def build_spoof_preview(domain: str, exec_name: str = "CEO",
                         exec_email: str = "", motif: str = "invoice",
                         to_addr: str = "") -> dict:

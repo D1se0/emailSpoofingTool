@@ -24,8 +24,10 @@ SPDX-License-Identifier: MIT
 from __future__ import annotations
 
 import argparse
+import base64
 import datetime
 import json
+import mimetypes
 import os
 import sys
 import time
@@ -413,6 +415,60 @@ def do_spooftest(domain: str, to_addr: str = "", motif: str = "invoice",
            border="yellow")
 
 
+def do_compose(from_name: str = "", from_email: str = "", to_addr: str = "",
+               subject: str = "", text: str = "", reply_to: str = "",
+               attachments: list = None, priority: str = "normal",
+               relay: str = "", save: str = "") -> None:
+    """Free-form composer: exact .eml from user fields + injection commands."""
+    if not from_email or "@" not in from_email or not to_addr or "@" not in to_addr:
+        console.print("  uso: compose --from-name 'CE0 Carlos Pérez' --from-email jefe@midominio.com "
+                      "--to buzon@destino.com --subject '…' --text '…' "
+                      "[--reply-to …] [--attach f1 --attach f2] "
+                      "[--priority high|normal|low] [--relay host] [--save drill.eml]")
+        return
+    atts = []
+    for path in (attachments or []):
+        p = os.path.expanduser(path)
+        try:
+            raw = open(p, "rb").read()
+            atts.append({"filename": os.path.basename(p),
+                         "mime": mimetypes.guess_type(p)[0] or "application/octet-stream",
+                         "content_b64": base64.b64encode(raw).decode("ascii"),
+                         "size": len(raw)})
+        except OSError as exc:
+            console.print(f"  [yellow]⚠ adjunto omitido ({path}): {exc}[/]")
+    out = hardening.compose_spoof_email(
+        from_name=from_name, from_email=from_email, to=to_addr,
+        subject=subject, text=text, reply_to=reply_to,
+        attachments=atts, priority=priority)
+    commands = hardening.generate_freeform_commands(
+        from_email=from_email, to=to_addr, from_name=from_name,
+        subject=subject, text=text, reply_to=reply_to,
+        attachments=atts, priority=priority, smtp_host=relay)
+
+    notice = ("⚠ USO EN ENTORNO CONTROLADO: dirige este mensaje solo a buzones "
+              "propios o con consentimiento explícito (simulacros de phishing "
+              "autorizados). Suplantar terceros es ilegal.")
+    if RICH:
+        console.print(f"  [yellow]{notice}[/]\n")
+        _panel("✉️ Mensaje .eml exacto", Text(out["message"]), border="red")
+        _panel("Comandos de inyección (tú los ejecutas)", Text(commands),
+               border="yellow")
+    else:
+        print(notice)
+        print(out["message"])
+        print(commands)
+    for w in out.get("warnings", []):
+        console.print(f"  [yellow]⚠ {w}[/]")
+    if save:
+        try:
+            with open(save, "w", encoding="utf-8") as fh:
+                fh.write(out["message"])
+            console.print(f"  💾 Guardado: [bold]{save}[/]")
+        except OSError as exc:
+            console.print(f"  [red]⚠ no se pudo guardar {save}: {exc}[/]")
+
+
 def do_drill(domain: str, to_addr: str, motif: str = "invoice",
              smtp_host: str = "", smtp_port: int = 0, imap: str = "",
              exec_name: str = "CEO", yes: bool = False) -> None:
@@ -508,6 +564,27 @@ def do_selftest(domain: str, to_addr: str, dry=False):
         console.print(f"  ❌ {res.get('error', 'fallo desconocido')}")
 
 
+def _gflag(raw: list, name: str) -> str:
+    """--name valor | --name=valor → valor ("") si ausente."""
+    for i, a in enumerate(raw):
+        if a == name and i + 1 < len(raw):
+            return raw[i + 1]
+        if a.startswith(name + "="):
+            return a.split("=", 1)[1]
+    return ""
+
+
+def _gmulti(raw: list, name: str) -> list:
+    """Todos los valores de un flag repetible."""
+    out = []
+    for i, a in enumerate(raw):
+        if a == name and i + 1 < len(raw):
+            out.append(raw[i + 1])
+        elif a.startswith(name + "="):
+            out.append(a.split("=", 1)[1])
+    return out
+
+
 def do_watch(domain: str, interval: int = 300):
     console.print(f"  👁 Monitorizando [bold]{domain}[/] cada {interval}s — Ctrl+C para parar")
     last = None
@@ -588,6 +665,7 @@ def interactive_repl() -> None:
   [bold]rollout[/] <dominio>        plan DMARC por fases
   [bold]selftest[/] <dom> <to>      email de prueba autorizado (in-domain)
   [bold]spooftest[/] <dom> [motivo] drill red-team: mensaje + comandos (sin envío)
+  [bold]compose[/] [flags]       compositor libre: From/To/Subject/Text/adjuntos → .eml
   [bold]drill[/] <dom> <buzon@dom> [flags] ENVÍO REAL del drill + veredicto + IMAP
   [bold]report[/] <dominio> [json|html]  guarda informe
   [bold]watch[/] <dominio> [seg]    monitorización continua
@@ -608,10 +686,21 @@ def interactive_repl() -> None:
                 do_hardening(args[0])
         elif cmd == "spooftest":
             if args:
-                do_spooftest(args[0], to_addr=_flag("--to"),
-                             exec_name=_flag("--exec") or "CEO",
+                do_spooftest(args[0], to_addr=_gflag(args, "--to"),
+                             exec_name=_gflag(args, "--exec") or "CEO",
                              motif=args[1] if len(args) > 1
                              and not args[1].startswith("--") else "invoice")
+        elif cmd == "compose":
+            do_compose(
+                from_name=_gflag(args, "--from-name"),
+                from_email=_gflag(args, "--from-email"),
+                to_addr=_gflag(args, "--to"),
+                subject=_gflag(args, "--subject"),
+                text=_gflag(args, "--text"),
+                reply_to=_gflag(args, "--reply-to"),
+                attachments=_gmulti(args, "--attach"),
+                priority=_gflag(args, "--priority") or "normal",
+                relay=_gflag(args, "--relay"), save=_gflag(args, "--save"))
         elif cmd == "drill":
             if len(args) >= 2:
                 if RICH:
@@ -676,14 +765,10 @@ def main() -> None:
     ns = parser.parse_args()
 
     def _flag(name: str) -> str:
-        """--name valor | --name=valor → valor ("") si ausente. Busca en ns.args."""
-        raw = ns.args
-        for i, a in enumerate(raw):
-            if a == name and i + 1 < len(raw):
-                return raw[i + 1]
-            if a.startswith(name + "="):
-                return a.split("=", 1)[1]
-        return ""
+        return _gflag(ns.args, name)
+
+    def _multi(name: str) -> list:
+        return _gmulti(ns.args, name)
 
     def _strip_flags(vals: list) -> list:
         """Positional args minus consumed flags and their values."""
@@ -695,14 +780,18 @@ def main() -> None:
                 if i + 1 < len(raw):
                     skip.add(i + 1)
             elif a.startswith(("--motif=", "--exec=", "--relay=", "--port=",
-                               "--imap=", "--imap-wait=")):
+                         "--imap=", "--imap-wait=", "--from-name=", "--from-email=",
+                         "--to=", "--subject=", "--text=", "--reply-to=",
+                         "--priority=", "--save=")):
                 skip.add(i)
         return [v for i, v in enumerate(vals) if i not in skip]
 
     # positional args excluding flags: recompute — argparse already lumped all.
     pos = [a for a in ns.args if not a.startswith("--")]
     # remove flag VALUES that are non-dash tokens following a flag
-    flag_tokens = {"--motif", "--exec", "--relay", "--port", "--imap", "--imap-wait"}
+    flag_tokens = {"--motif", "--exec", "--relay", "--port", "--imap", "--imap-wait",
+                   "--from-name", "--from-email", "--to", "--subject", "--text",
+                   "--reply-to", "--priority", "--save"}
     clean = []
     i = 0
     while i < len(ns.args):
@@ -711,7 +800,9 @@ def main() -> None:
             i += 2
             continue
         if a.startswith(("--motif=", "--exec=", "--relay=", "--port=",
-                         "--imap=", "--imap-wait=")):
+                         "--imap=", "--imap-wait=", "--from-name=", "--from-email=",
+                         "--to=", "--subject=", "--text=", "--reply-to=",
+                         "--priority=", "--save=")):
             i += 1
             continue
         if a == "--yes" or a == "--save":
@@ -726,7 +817,7 @@ def main() -> None:
         interactive_repl()
         return
     cmd = (ns.command or "").lower()
-    if not ns.no_banner:
+    if not ns.no_banner and "--no-banner" not in ns.args:
         show_banner(rainbow=load_config().get("rainbow", True))
     if cmd == "analyze":
         do_analyze(args[0] if args else "gmail.com", save="--save" in ns.args)
@@ -734,6 +825,20 @@ def main() -> None:
         do_dkim_hunt(args[0], selectors=args[1:])
     elif cmd == "harden":
         do_hardening(args[0])
+    elif cmd == "compose":
+        if not args or "--from-email" not in ns.args or "--to" not in ns.args:
+            console.print("uso: compose --from-name 'CE0 Carlos Pérez' --from-email jefe@midominio.com "
+                          "--to buzon@destino.com --subject '…' --text '…' "
+                          "[--reply-to …] [--attach f.pdf --attach f.png] "
+                          "[--priority high] [--relay host] [--save drill.eml]")
+        else:
+            do_compose(
+                from_name=_flag("--from-name"), from_email=_flag("--from-email"),
+                to_addr=_flag("--to"), subject=_flag("--subject"),
+                text=_flag("--text"), reply_to=_flag("--reply-to"),
+                attachments=_multi("--attach"),
+                priority=_flag("--priority") or "normal",
+                relay=_flag("--relay"), save=_flag("--save"))
     elif cmd == "drill":
         if len(args) < 2:
             console.print("uso: drill <dominio> <buzon@dominio> [--motif invoice|password|giftcard] "

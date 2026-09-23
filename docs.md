@@ -74,6 +74,7 @@ score = 0.20·SPF + 0.10·DKIM + 0.40·DMARC + 0.10·DNSSEC + 0.10·TLS + 0.10·
 | `/api/harden?domain=&ips=&selector=&policy=` | GET | genera registros/configs |
 | `/api/rollout?domain=` | GET | plan DMARC por fases |
 | `/api/spooftest?domain=&motif=` | GET | drill del Spoof Lab: mensaje + veredicto + comandos de inyección |
+| `/api/spooflab/compose` | POST | compositor libre: From/To/Subject/Text/Reply-To/prioridad/adjuntos → .eml exacto + comandos |
 | `/api/selftest` | POST | `{domain, to, dry_run}` — solo in-domain (403 si no) |
 | `/api/verify` | POST | `{raw}` verifica firmas DKIM de un email pegado |
 
@@ -85,6 +86,8 @@ Ver `python3 mailforge.py --help` y la sección Docs de la web.
 python3 mailforge.py analyze <dominio>        # análisis completo + score
 python3 mailforge.py dkim <dominio> [sel…]    # caza de selectores DKIM
 python3 mailforge.py spooftest <dominio> [motivo]  # drill red-team (sin envío)
+python3 mailforge.py compose --from-name 'CE0' --from-email jefe@midominio.com \
+    --to buzon@destino.com --subject '…' --text '…' [--attach f.pdf --priority high]  # compositor libre
 python3 mailforge.py harden <dominio>         # registros DNS + config
 python3 mailforge.py rollout <dominio>        # plan DMARC por fases
 python3 mailforge.py selftest <dom> <buzon>   # email de prueba autorizado
@@ -107,6 +110,7 @@ cd web && npm run build && node --test test/   # web
 | Comando | Qué hace | Riesgo |
 |---|---|---|
 | `spooftest <dom> [motivo]` | renderiza el mensaje suplantado + veredicto previsto + comandos para ti | cero (no conecta) |
+| `compose --from-name … --from-email … --to … --subject … --text … [--reply-to] [--attach f …] [--priority] [--relay] [--save]` | compositor libre estilo emkei.cz: mensaje .eml exacto con adjuntos reales + comandos de inyección con aviso de entorno controlado | cero (no conecta) |
 | `drill <dom> <buzon@dom> [flags]` | **envío real** al MX del dominio (o `--relay`), transcripción SMTP y veredicto (250 aceptado / 5xx rechazado) | 1 email real a TU buzón |
 | `drill … --imap host[/user]` | tras el envío, consulta por IMAP si el drill llegó a INBOX o spam | credenciales solo en memoria |
 

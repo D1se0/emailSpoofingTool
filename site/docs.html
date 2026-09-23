@@ -95,6 +95,7 @@
       <a href="#harden">harden</a>
       <a href="#rollout">rollout</a>
       <a href="#spooftest">spooftest</a>
+      <a href="#compose">compose (campos libres)</a>
       <a href="#drill">drill (envío real)</a>
       <a href="#imap">IMAP: ¿llegó?</a>
       <a href="#selftest">selftest</a>
@@ -297,6 +298,62 @@ motivo ∈ invoice | password | giftcard   (por defecto: invoice)</pre>
 │ ▸ Opción 2 — sendmail: …                                     │
 ╰──────────────────────────────────────────────────────────────╯</span></pre>
       <div class="tipbox">💡 <code>spooftest</code> vs <code>drill</code>: <code>spooftest</code> es la <b>predicción</b> (0 riesgo, 0 paquetes SMTP); <code>drill</code> es la <b>ejecución real</b> (1 email de verdad hacia TU buzón). Us spooftest primero para decidir, y drill para confirmarlo empíricamente.</div>
+
+      <h2 id="compose">🧾 <code>compose</code> — compositor libre (estilo emkei.cz)</h2>
+      <p>Genera el mensaje <b>exacto</b> que definirás campo a campo —From Name, From E-mail, To, Subject, Text, Reply-To, prioridad y <b>adjuntos reales</b>— y produce el <code>.eml</code> listo + los comandos de inyección para TU destinatario (propio o temporal, p. ej. un buzón desechable de prueba). Antes de usarlo, la herramienta muestra el <b>aviso de entorno controlado</b>; el envío automatizado por el motor sigue reservado a buzones del dominio propio.</p>
+
+      <h4>Sintaxis</h4>
+      <pre>python3 mailforge.py compose \
+    --from-name "&lt;NOMBRE VISIBLE&gt;" \
+    --from-email "&lt;EMAIL DE ENVÍO&gt;" \
+    --to "&lt;EMAIL DESTINATARIO&gt;" \
+    --subject "&lt;ASUNTO&gt;" \
+    --text "&lt;CUERPO/DESCRIPCIÓN&gt;" \
+  [ --reply-to "&lt;reply@ajeno.com&gt;" ]      # cabecera Reply-To distinta
+  [ --attach fichero1.pdf --attach foto.png ]   # adjuntos reales (máx 10)
+  [ --priority high|normal|low ]         # X-Priority 1 / 3 / 5
+  [ --relay smtp.turelay.com ]           # host que aparecerá en los comandos
+  [ --save drill.eml ]                   # además, guarda el .eml en disco</pre>
+
+      <h4>Ejemplo de prueba (datos ficticios)</h4>
+      <pre>$ python3 mailforge.py compose \
+    --from-name "CE0 Carlos Pérez" \
+    --from-email jefe@diseo.pntr.dev \
+    --to yvt0wp+77xiollatz23c@sharklasers.com \
+    --subject "URGENTE: Factura #4471 vencida" \
+    --text "Adjunto la factura pendiente de abono. Ruego su pago hoy mismo." \
+    --reply-to contabilidad@otro-correo.com \
+    --attach factura_4471.pdf --priority high \
+    --save drill.eml
+
+  ⚠ USO EN ENTORNO CONTROLADO: dirige este mensaje solo a buzones propios
+    o con consentimiento explícito (simulacros de phishing autorizados).
+
+╭ ✉️ Mensaje .eml exacto ═══════════════════════════════════════╮
+│ From: =?utf-8?q?CE0_Carlos_P=C3=A9rez?= &lt;jefe@diseo.pntr.dev&gt;   │
+│ To: yvt0wp+77xiollatz23c@sharklasers.com                      │
+│ Subject: URGENTE: Factura #4471 vencida                       │
+│ Reply-To: contabilidad@otro-correo.com                        │
+│ X-Priority: 1 · Importance: High                              │
+│ Content-Type: multipart/mixed  ← cuerpo + 1 adjunto real      │
+╰═══════════════════════════════════════════════════════════════╝
+  💾 Guardado: drill.eml  ·  📎 adjuntos embebidos: 1
+
+╭ Comandos de inyección (los ejecutas TÚ) ══════════════════════╮
+│ swaks --to 'yvt0wp+77xiollatz23c@sharklasers.com' \            │
+│       --from 'jefe@diseo.pntr.dev' \                           │
+│       --h-From: 'CE0 Carlos Pérez &lt;jefe@diseo.pntr.dev&gt;' \     │
+│       --attach @factura_4471.pdf --priority high ...           │
+│   — o —  sendmail -t &lt; drill.eml                               │
+╰═══════════════════════════════════════════════════════════════╝</pre>
+
+      <h4>Notas</h4>
+      <ul class="list">
+        <li>El <b>nombre visible</b> se codifica RFC 2047 (acentos OK) y la <b>dirección</b> queda intacta — idéntico a como lo hacen los clientes reales.</li>
+        <li>Los adjuntos se embeben como partes <code>multipart/mixed</code> reales (base64); el comando swaks usa <code>--attach @fichero</code> para el binario original.</li>
+        <li>Si un adjunto no es base64 válido se omite con un warning — nunca rompe el mensaje.</li>
+        <li>En la <b>consola web</b> (Spoof Lab) todo esto es un formulario: casillas de ficheros, lista visual de adjuntos, “Attach another file”, descarga del <code>.eml</code> y envío automatizado cuando destinatario y dominio del From coinciden.</li>
+      </ul>
 
       <h2 id="drill">🚀 <code>drill</code> — ENVÍO REAL con veredicto del servidor</h2>
       <div class="dangerbox">

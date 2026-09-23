@@ -243,31 +243,54 @@ const MOTIFS = [
 ];
 
 function SpoofLab() {
-  const [domain, setDomain] = useState("");
-  const [motif, setMotif] = useState("invoice");
-  const [execName, setExecName] = useState("CEO");
+  // free-form composer fields (como emkei: From Name/Email, To, Subject, Text, adjuntos)
+  const [fromName, setFromName] = useState("");
+  const [fromEmail, setFromEmail] = useState("");
+  const [to, setTo] = useState("");
+  const [subject, setSubject] = useState("");
+  const [text, setText] = useState("");
+  const [replyTo, setReplyTo] = useState("");
+  const [priority, setPriority] = useState("normal");
+  const [attachments, setAttachments] = useState([]);   // {filename, content_b64, size}
+  const [relay, setRelay] = useState("");
+  const [ack, setAck] = useState(false);                // aviso entorno controlado
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [data, setData] = useState(null);
-  // real-send state
-  const [to, setTo] = useState("");
-  const [relay, setRelay] = useState("");
-  const [sending, setSending] = useState(false);
+  const [data, setData] = useState(null);               // preview + comandos
+  // in-domain fast path (drill real)
+  const [inDomain, setInDomain] = useState(true);
   const [sendResult, setSendResult] = useState(null);
+  const [sending, setSending] = useState(false);
   const [imap, setImap] = useState("");
   const [imapPass, setImapPass] = useState("");
   const [checking, setChecking] = useState(false);
   const [checkResult, setCheckResult] = useState(null);
 
-  const run = async (e) => {
-    e && e.preventDefault();
-    if (!domain.trim()) return;
+  const addFiles = (fileList) => {
+    const files = [...fileList].slice(0, 10 - attachments.length);
+    files.forEach(f => {
+      if (f.size > 4 * 1024 * 1024) { setError(`«${f.name}» supera 4MB`); return; }
+      const reader = new FileReader();
+      reader.onload = () => setAttachments(prev => [...prev, {
+        filename: f.name, mime: f.type || "application/octet-stream",
+        content_b64: btoa(new Uint8Array(reader.result).reduce(
+          (s, b) => s + String.fromCharCode(b), "")), size: f.size,
+      }]);
+      reader.readAsArrayBuffer(f);
+    });
+  };
+
+  const compose = async () => {
     setLoading(true); setError(""); setData(null);
     setSendResult(null); setCheckResult(null);
     try {
-      const qs = `?domain=${encodeURIComponent(domain.trim().toLowerCase())}&motif=${motif}&exec_name=${encodeURIComponent(execName || "CEO")}`;
-      setData(await api(`/api/spooftest${qs}`));
-      setTo(`buzon@${domain.trim().toLowerCase()}`);
+      setData(await api("/api/spooflab/compose", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ from_name: fromName, from_email: fromEmail, to,
+          subject, text, reply_to: replyTo, attachments, priority,
+          smtp_host: relay.trim() || undefined }),
+      }));
     } catch (err) { setError(err.message); } finally { setLoading(false); }
   };
 
@@ -277,8 +300,9 @@ function SpoofLab() {
       setSendResult(await api("/api/spooflab/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ domain: domain.trim().toLowerCase(), to: to.trim(),
-          motif, exec_name: execName || "CEO", smtp_host: relay.trim() || undefined }),
+        body: JSON.stringify({ domain: (fromEmail.split("@")[1] || "").trim().toLowerCase(),
+          to: to.trim(), motif: "invoice", exec_name: fromName || "CEO",
+          smtp_host: relay.trim() || undefined }),
       }));
     } catch (err) { setSendResult({ verdict: "error", error: err.message }); }
     finally { setSending(false); }
@@ -303,38 +327,96 @@ function SpoofLab() {
     : (v.includes("RECHAZADO") || v.includes("REJECT")) ? "var(--good)"
     : "var(--warn)";
 
+  const fieldStyle = { width: "100%", background: "rgba(7,10,19,0.6)", border: "1px solid var(--line-strong)", color: "var(--text)", borderRadius: 10, padding: "11px 14px", fontSize: "0.95rem", outline: "none" };
+
   return (
     <section className="container section">
       <h2 className="section-title">🎭 Spoof Lab</h2>
       <p className="section-sub">
-        Genera el <b>mensaje suplantado</b> que un atacante real crearía contra tu
-        dominio, predice el veredicto según tu postura DNS y te da los comandos
-        para <b>inyectarlo tú</b> desde tu propio relay hacia un buzón tuyo.
-        MailForge <b>nunca envía nada</b>: el disparador eres tú.
+        Compositor libre al estilo de las herramientas de spoofing: rellena los
+        campos, adjunta ficheros, genera el .eml exacto y los comandos de inyección.
+        El envío automatizado solo apunta a tu propio dominio; para otros destinos
+        usa los comandos manuales que se generan (tú los ejecutas).
       </p>
-      <div className="warnbox" style={{ border: "1px solid rgba(255,92,122,0.4)", background: "rgba(255,92,122,0.06)", color: "var(--bad)", borderRadius: 12, padding: "14px 18px", marginBottom: 24, fontSize: "0.9rem", lineHeight: 1.6 }}>
-        ⚠ Drill autorizado únicamente: apunta a un buzón <b>del dominio que analizas
-        y declaras tuyo</b>. Usar esto contra terceros es ilegal.
+
+      <div className="warnbox" style={{ border: "1px solid rgba(255,92,122,0.4)", background: "rgba(255,92,122,0.06)", color: "var(--bad)", borderRadius: 12, padding: "14px 18px", marginBottom: 22, fontSize: "0.9rem", lineHeight: 1.6 }}>
+        ⚠ <b>Aviso obligatorio:</b> usa esta herramienta únicamente en un <b>entorno
+        controlado</b> y sobre <b>tu propio dominio</b> o con consentimiento explícito
+        (simulacros de phishing autorizados). Suplantar dominios de terceros es ilegal.
       </div>
 
-      <form className="scan-box" onSubmit={run} style={{ maxWidth: 720 }}>
-        <input placeholder="midominio.com" value={domain} onChange={(e) => setDomain(e.target.value)} spellCheck={false} />
-        <button className="btn btn-primary" disabled={loading || !domain.trim()}>
-          {loading ? <span className="spinner" /> : "Generar drill"}
-        </button>
-      </form>
+      <div className="card" style={{ marginBottom: 20 }}>
+        <h3 style={{ marginBottom: 14 }}>🧾 Campos del mensaje</h3>
+        <div className="grid grid-2" style={{ gap: 14 }}>
+          <div>
+            <label style={{ color: "var(--muted)", fontSize: "0.82rem" }}>From Name (nombre visible)</label>
+            <input style={fieldStyle} placeholder="CE0 Carlos Pérez" value={fromName} onChange={(e) => setFromName(e.target.value)} />
+          </div>
+          <div>
+            <label style={{ color: "var(--muted)", fontSize: "0.82rem" }}>From E-mail (email de envío)</label>
+            <input style={fieldStyle} placeholder="jefe@midominio.com" value={fromEmail} onChange={(e) => setFromEmail(e.target.value)} spellCheck={false} />
+          </div>
+          <div>
+            <label style={{ color: "var(--muted)", fontSize: "0.82rem" }}>To (email destinatario)</label>
+            <input style={fieldStyle} placeholder="destinatario@correo.com" value={to} onChange={(e) => setTo(e.target.value)} spellCheck={false} />
+          </div>
+          <div>
+            <label style={{ color: "var(--muted)", fontSize: "0.82rem" }}>Subject (asunto)</label>
+            <input style={fieldStyle} placeholder="URGENTE: Factura vencida" value={subject} onChange={(e) => setSubject(e.target.value)} />
+          </div>
+        </div>
+        <div style={{ marginTop: 14 }}>
+          <label style={{ color: "var(--muted)", fontSize: "0.82rem" }}>Text (descripción / cuerpo)</label>
+          <textarea rows={6} style={{ ...fieldStyle, resize: "vertical", fontFamily: "var(--mono)", fontSize: "0.86rem" }}
+            placeholder="Cuerpo del mensaje…" value={text} onChange={(e) => setText(e.target.value)} />
+        </div>
+        <div className="grid grid-3" style={{ gap: 14, marginTop: 14 }}>
+          <div>
+            <label style={{ color: "var(--muted)", fontSize: "0.82rem" }}>Reply-To (opcional)</label>
+            <input style={fieldStyle} placeholder="recoger@otro-dominio.com" value={replyTo} onChange={(e) => setReplyTo(e.target.value)} spellCheck={false} />
+          </div>
+          <div>
+            <label style={{ color: "var(--muted)", fontSize: "0.82rem" }}>Prioridad</label>
+            <select style={fieldStyle} value={priority} onChange={(e) => setPriority(e.target.value)}>
+              <option value="normal">normal</option>
+              <option value="high">high (X-Priority 1)</option>
+              <option value="low">low</option>
+            </select>
+          </div>
+          <div>
+            <label style={{ color: "var(--muted)", fontSize: "0.82rem" }}>Relay SMTP (opcional)</label>
+            <input style={fieldStyle} placeholder="smtp.turelay.com" value={relay} onChange={(e) => setRelay(e.target.value)} spellCheck={false} />
+          </div>
+        </div>
 
-      <div style={{ display: "flex", gap: 12, margin: "14px 0 26px", flexWrap: "wrap", alignItems: "center" }}>
-        <label style={{ color: "var(--muted)", fontSize: "0.88rem" }}>
-          Suplanta a:{" "}
-          <input value={execName} onChange={(e) => setExecName(e.target.value)}
-            style={{ background: "rgba(7,10,19,0.6)", border: "1px solid var(--line-strong)", color: "var(--text)", borderRadius: 8, padding: "7px 10px", width: 120, fontFamily: "var(--mono)" }} />
-        </label>
-        <div style={{ display: "flex", gap: 6 }}>
-          {MOTIFS.map(([id, label]) => (
-            <button key={id} type="button" className={`btn btn-sm ${motif === id ? "btn-primary" : "btn-ghost"}`}
-              onClick={() => setMotif(id)}>{label}</button>
-          ))}
+        <div style={{ marginTop: 16 }}>
+          <label style={{ color: "var(--muted)", fontSize: "0.82rem" }}>Attachments (máx. 10 · 4MB c/u)</label>
+          <input type="file" multiple onChange={(e) => addFiles(e.target.files)}
+            style={{ width: "100%", color: "var(--muted)", fontSize: "0.85rem" }} />
+          {attachments.length > 0 && (
+            <div style={{ marginTop: 8 }}>
+              {attachments.map((a, i) => (
+                <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 11px", border: "1px solid var(--line)", borderRadius: 9, margin: "5px 0", fontSize: "0.85rem" }}>
+                  <span>📎 {a.filename}</span>
+                  <span style={{ color: "var(--muted)", marginLeft: "auto", fontFamily: "var(--mono)" }}>{(a.size / 1024).toFixed(1)} KB</span>
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => setAttachments(attachments.filter((_, j) => j !== i))}>✕</button>
+                </div>
+              ))}
+              <input type="file" multiple onChange={(e) => addFiles(e.target.files)}
+                style={{ width: "100%", color: "var(--muted)", fontSize: "0.82rem", marginTop: 6 }} />
+              <div style={{ color: "var(--muted)", fontSize: "0.78rem", marginTop: 3 }}>📎 Attach another file (opcional)</div>
+            </div>
+          )}
+        </div>
+
+        <div style={{ display: "flex", gap: 12, alignItems: "center", marginTop: 18, flexWrap: "wrap" }}>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--muted)", fontSize: "0.88rem", cursor: "pointer" }}>
+            <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} />
+            Confirmo que uso esto en un entorno controlado / con dominio propio
+          </label>
+          <button className="btn btn-primary" onClick={compose} disabled={loading || !ack || !fromEmail.includes("@") || !to.includes("@")}>
+            {loading ? <><span className="spinner" /> Generando…</> : "⚡ Generar mensaje + comandos"}
+          </button>
         </div>
       </div>
 
@@ -342,106 +424,83 @@ function SpoofLab() {
 
       {data && (
         <div className="fade-up">
-          {/* ── REAL SEND ─────────────────────────────────────────── */}
-          <div className="card" style={{ marginTop: 0, marginBottom: 18, borderColor: "rgba(255,92,122,.4)" }}>
-            <h3>🚀 Envío real del drill</h3>
-            <p style={{ color: "var(--muted)", fontSize: "0.86rem", marginBottom: 12 }}>
-              Envía el mensaje suplantado <b>de verdad</b> al buzón indicado (debe ser
-              del dominio analizado) — directo al MX del dominio o vía tu relay. Verás la
-              transcripción SMTP completa y el veredicto del servidor: aceptado (250) o rechazado (5xx).
-            </p>
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
-              <input placeholder="buzon@tudominio.com" value={to} onChange={(e) => setTo(e.target.value)}
-                style={{ flex: 1, minWidth: 220, background: "rgba(7,10,19,0.6)", border: "1px solid var(--line-strong)", color: "var(--text)", borderRadius: 10, padding: "11px 14px", fontFamily: "var(--mono)" }} />
-              <input placeholder="relay propio (opcional, ej. smtp.turelay.com)" value={relay} onChange={(e) => setRelay(e.target.value)}
-                style={{ flex: 1, minWidth: 220, background: "rgba(7,10,19,0.6)", border: "1px solid var(--line-strong)", color: "var(--text)", borderRadius: 10, padding: "11px 14px", fontFamily: "var(--mono)" }} />
-              <button className="btn btn-primary" onClick={sendNow} disabled={sending || !to.includes("@")}>
-                {sending ? <><span className="spinner" /> Enviando…</> : "✉ Enviar drill real"}
-              </button>
-            </div>
+          {data.warnings && data.warnings.length > 0 && (
+            <div className="err-box">⚠ {data.warnings.join(" · ")}</div>
+          )}
+          {data.notice && (
+            <div style={{ border: "1px solid rgba(255,210,77,.4)", background: "rgba(255,210,77,.07)", color: "var(--warn)", borderRadius: 12, padding: "12px 16px", margin: "0 0 16px", fontSize: "0.88rem" }}>{data.notice}</div>
+          )}
 
-            {sendResult && (
-              <div className="fade-up" style={{ marginTop: 14 }}>
-                <div style={{ padding: "12px 16px", borderRadius: 10, border: `1px solid ${verdictColor(sendResult.verdict === "accepted" ? "ACEPTADO" : sendResult.verdict === "rejected" ? "RECHAZADO" : "")}`, background: "rgba(0,0,0,.3)" }}>
-                  <b style={{ color: verdictColor(sendResult.verdict === "accepted" ? "ACEPTADO" : sendResult.verdict === "rejected" ? "RECHAZADO" : "") }}>
-                    {sendResult.sent ? "✅ ACEPTADO POR EL SERVIDOR (250)" :
-                     sendResult.verdict === "rejected" ? "⛔ RECHAZADO POR EL SERVIDOR" :
-                     sendResult.verdict === "blocked" ? "🚫 bloqueado (fuera de dominio)" : "⚠ error de envío"}
-                  </b>
-                  {sendResult.mx && <span style={{ color: "var(--muted)" }}> — vía {sendResult.mx}:{sendResult.port}</span>}
-                  {sendResult.error && <div style={{ color: "var(--muted)", fontSize: "0.85rem", marginTop: 6 }}>{sendResult.error}</div>}
-                  {sendResult.note && <div style={{ fontSize: "0.85rem", marginTop: 6 }}>{sendResult.note}</div>}
-                </div>
-                {sendResult.transcript && sendResult.transcript.length > 0 && (
-                  <pre style={{ fontSize: "0.72rem", background: "rgba(0,0,0,.45)", border: "1px solid var(--line)", borderRadius: 10, padding: 14, overflowX: "auto", marginTop: 10, lineHeight: 1.55, color: "#c9d4ff" }}>
-                    {sendResult.transcript.slice(-26).join("\n")}
-                  </pre>
-                )}
-                {sendResult.sent && (
-                  <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                    <input placeholder="imap.tudominio.com[/usuario]" value={imap} onChange={(e) => setImap(e.target.value)}
-                      style={{ background: "rgba(7,10,19,0.6)", border: "1px solid var(--line-strong)", color: "var(--text)", borderRadius: 10, padding: "10px 13px", fontFamily: "var(--mono)", minWidth: 200 }} />
-                    <input type="password" placeholder="contraseña IMAP (no se guarda)" value={imapPass} onChange={(e) => setImapPass(e.target.value)}
-                      style={{ background: "rgba(7,10,19,0.6)", border: "1px solid var(--line-strong)", color: "var(--text)", borderRadius: 10, padding: "10px 13px", fontFamily: "var(--mono)", minWidth: 190 }} />
-                    <button className="btn btn-ghost btn-sm" onClick={checkInbox} disabled={checking || !imap.trim()}>
-                      {checking ? <><span className="spinner" /> Buscando…</> : "📥 ¿Llegó? (IMAP)"}
-                    </button>
-                  </div>
-                )}
-                {checkResult && (
-                  <div className="fade-up" style={{ marginTop: 10, padding: "11px 15px", borderRadius: 10, background: "rgba(0,0,0,.3)", border: "1px solid var(--line)", fontWeight: 700, color: checkResult.checked ? verdictColor(checkResult.verdict) : "var(--warn)" }}>
-                    {checkResult.checked ? `📥 ${checkResult.verdict}` : `⚠ ${checkResult.error}`}
-                    {checkResult.folders_hit && checkResult.folders_hit.length > 0 && (
-                      <div style={{ color: "var(--muted)", fontWeight: 400, fontSize: "0.82rem", marginTop: 4 }}>
-                        {checkResult.folders_hit.map(f => `${f.folder}: ${f.count}`).join(" · ")}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          <div className="card" style={{ borderLeft: `4px solid ${verdictColor(data.predicted_verdict)}` }}>
-            <h3>🔮 Veredicto previsto</h3>
-            <p style={{ fontSize: "1.25rem", fontWeight: 800, color: verdictColor(data.predicted_verdict), margin: "8px 0" }}>
-              {data.predicted_verdict}
-            </p>
-            <p style={{ color: "var(--muted)", fontSize: "0.85rem" }}>
-              Basado en: {data.posture_basis.join(" · ")}. El envío real lo haces tú con los
-              comandos de abajo y confirmas el resultado en tu bandeja.
-            </p>
-          </div>
-
-          <div className="card" style={{ marginTop: 18 }}>
-            <h3>✉️ Mensaje suplantado (vista previa .eml)</h3>
-            <pre style={{ fontSize: "0.78rem", overflowX: "auto", lineHeight: 1.6, background: "rgba(0,0,0,0.4)", padding: 16, borderRadius: 10 }}>{data.message}</pre>
-            <div style={{ marginTop: 12 }}>
+          <div className="card" style={{ marginBottom: 18 }}>
+            <h3>✉️ Mensaje .eml exacto (con adjuntos)</h3>
+            <pre style={{ fontSize: "0.74rem", overflowX: "auto", lineHeight: 1.6, background: "rgba(0,0,0,0.4)", padding: 16, borderRadius: 10, maxHeight: 340 }}>{data.message}</pre>
+            <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
               <button className="btn btn-ghost btn-sm" onClick={() => navigator.clipboard && navigator.clipboard.writeText(data.message)}>📋 Copiar .eml</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => {
+                const blob = new Blob([data.message], { type: "message/rfc822" });
+                const a = document.createElement("a");
+                a.href = URL.createObjectURL(blob); a.download = "spoof-drill.eml"; a.click();
+              }}>⬇ Descargar .eml</button>
             </div>
           </div>
 
-          <div className="card" style={{ marginTop: 18 }}>
-            <h3>🚀 Inyección desde tu relay</h3>
-            <pre style={{ fontSize: "0.78rem", overflowX: "auto", lineHeight: 1.6, whiteSpace: "pre-wrap", background: "rgba(0,0,0,0.4)", padding: 16, borderRadius: 10 }}>{data.commands}</pre>
+          <div className="card" style={{ marginBottom: 18 }}>
+            <h3>🚀 Inyección manual (tú ejecutas los comandos)</h3>
+            <pre style={{ fontSize: "0.74rem", overflowX: "auto", lineHeight: 1.6, whiteSpace: "pre-wrap", background: "rgba(0,0,0,0.4)", padding: 16, borderRadius: 10 }}>{data.commands}</pre>
           </div>
 
-          <div className="card" style={{ marginTop: 18 }}>
-            <h3>🧬 Perfil del ataque simulado</h3>
-            <table className="vec-table">
-              <tbody>
-                {Object.entries(data.profile).map(([k, v]) => (
-                  <tr key={k}><td style={{ width: 180, fontWeight: 700 }}>{k}</td><td style={{ fontFamily: "var(--mono)", fontSize: "0.8rem" }}>{v}</td></tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          {/* in-domain fast path: envío automatizado con guard */}
+          {fromEmail.includes("@") && to.trim().toLowerCase().endsWith("@" + fromEmail.split("@")[1].trim().toLowerCase()) && (
+            <div className="card" style={{ borderColor: "rgba(91,228,155,.4)" }}>
+              <h3>📮 Envío automatizado disponible</h3>
+              <p style={{ color: "var(--muted)", fontSize: "0.86rem" }}>
+                El destinatario pertenece al mismo dominio del From (tu dominio):
+                MailForge puede enviarlo por ti al MX con transcripción completa.
+              </p>
+              <button className="btn btn-primary" onClick={sendNow} disabled={sending || !to.includes("@")}>
+                {sending ? <><span className="spinner" /> Enviando…</> : "✉ Enviar drill real (in-domain)"}
+              </button>
+              {sendResult && (
+                <div className="fade-up" style={{ marginTop: 14 }}>
+                  <div style={{ padding: "12px 16px", borderRadius: 10, border: "1px solid var(--line-strong)", background: "rgba(0,0,0,.3)" }}>
+                    <b style={{ color: sendResult.sent ? "var(--warn)" : sendResult.verdict === "rejected" ? "var(--good)" : "var(--bad)" }}>
+                      {sendResult.sent ? "✅ ACEPTADO POR EL SERVIDOR (250)" :
+                       sendResult.verdict === "rejected" ? "⛔ RECHAZADO POR EL SERVIDOR" :
+                       "⚠ " + (sendResult.error || sendResult.verdict)}
+                    </b>
+                    {sendResult.mx && <span style={{ color: "var(--muted)" }}> — vía {sendResult.mx}:{sendResult.port}</span>}
+                    {sendResult.error && <div style={{ color: "var(--muted)", fontSize: "0.85rem", marginTop: 6 }}>{sendResult.error}</div>}
+                  </div>
+                  {sendResult.transcript && sendResult.transcript.length > 0 && (
+                    <pre style={{ fontSize: "0.72rem", background: "rgba(0,0,0,.45)", border: "1px solid var(--line)", borderRadius: 10, padding: 14, overflowX: "auto", marginTop: 10, lineHeight: 1.55, color: "#c9d4ff" }}>
+                      {sendResult.transcript.slice(-26).join("\n")}
+                    </pre>
+                  )}
+                  {sendResult.sent && (
+                    <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                      <input placeholder="imap.tudominio.com[/usuario]" value={imap} onChange={(e) => setImap(e.target.value)}
+                        style={{ background: "rgba(7,10,19,0.6)", border: "1px solid var(--line-strong)", color: "var(--text)", borderRadius: 10, padding: "10px 13px", fontFamily: "var(--mono)", minWidth: 200 }} />
+                      <input type="password" placeholder="contraseña IMAP (no se guarda)" value={imapPass} onChange={(e) => setImapPass(e.target.value)}
+                        style={{ background: "rgba(7,10,19,0.6)", border: "1px solid var(--line-strong)", color: "var(--text)", borderRadius: 10, padding: "10px 13px", fontFamily: "var(--mono)", minWidth: 190 }} />
+                      <button className="btn btn-ghost btn-sm" onClick={checkInbox} disabled={checking || !imap.trim()}>
+                        {checking ? <><span className="spinner" /> Buscando…</> : "📥 ¿Llegó? (IMAP)"}
+                      </button>
+                    </div>
+                  )}
+                  {checkResult && (
+                    <div className="fade-up" style={{ marginTop: 10, padding: "11px 15px", borderRadius: 10, background: "rgba(0,0,0,.3)", border: "1px solid var(--line)", fontWeight: 700, color: checkResult.checked ? verdictColor(checkResult.verdict) : "var(--warn)" }}>
+                      {checkResult.checked ? `📥 ${checkResult.verdict}` : `⚠ ${checkResult.error}`}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
     </section>
   );
 }
-
 // ─────────────────────────────────────────────────────────────────
 // Analyzer page
 // ─────────────────────────────────────────────────────────────────
