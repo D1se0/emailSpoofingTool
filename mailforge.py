@@ -29,6 +29,7 @@ import datetime
 import json
 import mimetypes
 import os
+import shlex
 import sys
 import time
 
@@ -649,7 +650,10 @@ def interactive_repl() -> None:
             break
         if not line:
             continue
-        parts = line.split()
+        try:
+            parts = shlex.split(line)
+        except ValueError:
+            parts = line.split()   # comillas sin cerrar: modo tolerante
         cmd, args = parts[0].lower(), parts[1:]
         if cmd in ("quit", "exit", "q"):
             break
@@ -826,19 +830,13 @@ def main() -> None:
     elif cmd == "harden":
         do_hardening(args[0])
     elif cmd == "compose":
-        if not args or "--from-email" not in ns.args or "--to" not in ns.args:
-            console.print("uso: compose --from-name 'CE0 Carlos Pérez' --from-email jefe@midominio.com "
-                          "--to buzon@destino.com --subject '…' --text '…' "
-                          "[--reply-to …] [--attach f.pdf --attach f.png] "
-                          "[--priority high] [--relay host] [--save drill.eml]")
-        else:
-            do_compose(
-                from_name=_flag("--from-name"), from_email=_flag("--from-email"),
-                to_addr=_flag("--to"), subject=_flag("--subject"),
-                text=_flag("--text"), reply_to=_flag("--reply-to"),
-                attachments=_multi("--attach"),
-                priority=_flag("--priority") or "normal",
-                relay=_flag("--relay"), save=_flag("--save"))
+        do_compose(
+            from_name=_flag("--from-name"), from_email=_flag("--from-email"),
+            to_addr=_flag("--to"), subject=_flag("--subject"),
+            text=_flag("--text"), reply_to=_flag("--reply-to"),
+            attachments=_multi("--attach"),
+            priority=_flag("--priority") or "normal",
+            relay=_flag("--relay"), save=_flag("--save"))
     elif cmd == "drill":
         if len(args) < 2:
             console.print("uso: drill <dominio> <buzon@dominio> [--motif invoice|password|giftcard] "
