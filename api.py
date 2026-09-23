@@ -135,6 +135,32 @@ def main() -> None:
                   "posture_basis": basis,
                   "commands": hardening.generate_injection_commands(domain, to)})
 
+        elif action == "drill_send":
+            domain = (payload.get("domain") or "").lower().strip()
+            to = (payload.get("to") or "").lower().strip()
+            if not _valid_domain(domain):
+                return emit({"error": "invalid domain"})
+            if _out_of_domain_guard(domain, to):
+                return emit({"error": "recipient outside analyzed domain",
+                             "detail": "el envío real solo apunta a buzones del dominio analizado"})
+            emit(hardening.send_spoof_drill(
+                domain, to,
+                exec_name=(payload.get("exec_name") or "CEO").strip()[:60],
+                motif=(payload.get("motif") or "invoice").strip()[:20],
+                smtp_host=(payload.get("smtp_host") or "").strip()[:253],
+                smtp_port=int(payload.get("smtp_port") or 0) or 25,
+                smtp_user=(payload.get("smtp_user") or "").strip()[:128],
+                smtp_pass=str(payload.get("smtp_pass") or "")[:128],
+                helo_name=(payload.get("helo") or "drill.mailforge.local").strip()[:253]))
+
+        elif action == "drill_check":
+            emit(hardening.check_drill_arrival(
+                (payload.get("imap_host") or "").strip()[:253],
+                (payload.get("imap_user") or "").strip()[:254],
+                str(payload.get("imap_pass") or "")[:128],
+                wait_seconds=int(payload.get("wait_seconds") or 0),
+                port=int(payload.get("imap_port") or 993)))
+
         elif action == "verify":
             raw = payload.get("raw") or ""
             if not raw or len(raw) > 1024 * 1024:

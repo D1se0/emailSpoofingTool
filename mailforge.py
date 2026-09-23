@@ -52,7 +52,7 @@ except ImportError:  # pragma: no cover
     Console = Table = Panel = Text = box = Progress = Prompt = Confirm = None
 
 APP = "MailForge"
-VERSION = "1.0.0"
+VERSION = "1.2.0"
 SAVE_DIR = os.path.join(_HERE, "reports")
 CONFIG_PATH = os.path.join(_HERE, ".mailforge.json")
 
@@ -409,6 +409,87 @@ def do_spooftest(domain: str, to_addr: str = "", motif: str = "invoice"):
            border="yellow")
 
 
+def do_drill(domain: str, to_addr: str, motif: str = "invoice",
+             smtp_host: str = "", smtp_port: int = 0, imap: str = "",
+             exec_name: str = "CEO", yes: bool = False) -> None:
+    """Real spoofing drill: send for real + report server verdict (+ IMAP check)."""
+    if not to_addr or "@" not in to_addr:
+        console.print("  uso: drill <dominio> <buzon@dominio> [opciones]")
+        return
+    if RICH:
+        console.print(Panel(Text(
+            f"DRILL REAL DE SUPLANTACIÓN\n\n"
+            f"  Dominio (declaras ser el propietario): {domain}\n"
+            f"  Buzón destino (tuyo): {to_addr}\n"
+            f"  Suplantado: {exec_name} <…@{domain}>\n"
+            f"  Motivo: {motif}\n"
+            f"  Relay: {smtp_host or 'MX del dominio (directo)'}\n\n"
+            f"Se ENVIARÁ de verdad el mensaje. Solo prosigue si {domain} es tuyo.",
+            style="bold red"), border_style="red", title="⚠ CONFIRMACIÓN"))
+        if not yes:
+            ok = Confirm.ask("¿Confirmas que es tu dominio y quieres enviar el drill?",
+                             default=False)
+        else:
+            ok = True
+    else:
+        answer = input(f"¿Es {domain} tuyo y quieres enviar el drill? (sí/NO): ")
+        ok = yes or answer.lower().strip() in ("sí", "si", "s", "y", "yes")
+    if not ok:
+        console.print("  [yellow]Drill cancelado por el operador.[/]")
+        return
+
+    if RICH:
+        with Progress(transient=True) as prog:
+            t = prog.add_task("[red]Enviando drill…", total=4)
+            for _ in range(4):
+                time.sleep(0.15)
+                prog.advance(t)
+
+    out = hardening.send_spoof_drill(domain, to_addr, exec_name=exec_name,
+                                     motif=motif, smtp_host=smtp_host,
+                                     smtp_port=smtp_port)
+
+    # Transcript panel
+    tr = "\n".join(out.get("transcript", [])[-24:])
+    if tr:
+        _panel(f"Transcripción SMTP — {out.get('mx', '?')}:{out.get('port', 25)}",
+               Text(tr), border="dim")
+
+    verdict_style = {"accepted": "bold yellow", "rejected": "bold green",
+                     "error": "bold red", "blocked": "bold red"}.get(out["verdict"], "")
+    if out.get("sent"):
+        if RICH:
+            console.print(f"  ✉ ENVIADO vía {out['mx']}:{out['port']} → "
+                          f"[{verdict_style}]ACEPTADO (250)[/] "
+                          f"— Message-ID: {out.get('message_id', '?')}")
+        console.print(f"  {out.get('note', '')}")
+        console.print("  💡 Comprueba la bandeja y ejecuta: "
+                      "drill --imap <buzon> para verificar dónde aterrizó")
+    else:
+        if RICH:
+            console.print(f"  ✖ [{verdict_style}]{out.get('error', out['verdict'])}[/]")
+        console.print(f"  {out.get('note', '')}")
+        for k, v in (out.get("recipients_refused") or {}).items():
+            console.print(f"     ↳ {k} → {v}")
+
+    if imap:
+        console.print("  📥 Comprobando llegada por IMAP…")
+        host, user = imap.split("/", 1) if "/" in imap else (imap, to_addr)
+        import getpass
+        pw = (os.environ.get("MAILFORGE_IMAP_PASS")
+              or (getpass.getpass("  Contraseña IMAP: ") if sys.stdin.isatty() else ""))
+        chk = hardening.check_drill_arrival(host, user, pw, wait_seconds=20)
+        if chk.get("checked"):
+            style = "bold red" if chk["inbox"] else \
+                ("bold yellow" if chk["junk"] else "dim")
+            if RICH:
+                console.print(f"  [{style}]📥 {chk['verdict']}[/]")
+            for f in chk.get("folders_hit", []):
+                console.print(f"     ↳ {f['folder']}: {f['count']} mensaje(s)")
+        else:
+            console.print(f"  ⚠ {chk.get('error', 'no se pudo verificar')}")
+
+
 def do_selftest(domain: str, to_addr: str, dry=False):
     res = hardening.send_selftest(domain, to_addr, dry_run=dry)
     if res.get("dry_run"):
@@ -503,6 +584,7 @@ def interactive_repl() -> None:
   [bold]rollout[/] <dominio>        plan DMARC por fases
   [bold]selftest[/] <dom> <to>      email de prueba autorizado (in-domain)
   [bold]spooftest[/] <dom> [motivo] drill red-team: mensaje + comandos (sin envío)
+  [bold]drill[/] <dom> <buzon@dom> [flags] ENVÍO REAL del drill + veredicto + IMAP
   [bold]report[/] <dominio> [json|html]  guarda informe
   [bold]watch[/] <dominio> [seg]    monitorización continua
   [bold]config[/]  ·  [bold]about[/]  ·  [bold]quit[/]""")
@@ -523,6 +605,17 @@ def interactive_repl() -> None:
         elif cmd == "spooftest":
             if args:
                 do_spooftest(args[0], motif=args[1] if len(args) > 1 else "invoice")
+        elif cmd == "drill":
+            if len(args) >= 2:
+                if RICH:
+                    ok = Confirm.ask(f"¿Confirmas que {args[0]} es TU dominio y "
+                                     "quieres ENVIAR el drill real?", default=False)
+                else:
+                    ok = input("¿Es tu dominio? (s/N): ").lower().startswith("s")
+                if ok:
+                    do_drill(args[0], args[1])
+                else:
+                    console.print("  [yellow]Drill cancelado.[/]")
         elif cmd == "selftest":
             if len(args) >= 2:
                 if RICH:
@@ -570,22 +663,84 @@ def main() -> None:
     parser.add_argument("--version", action="version", version=f"{APP} {VERSION}")
     parser.add_argument("--no-banner", action="store_true")
     parser.add_argument("command", nargs="?", default=None,
-                        help="analyze|dkim|harden|selftest|report|watch|…")
-    parser.add_argument("args", nargs="*", help="argumentos del comando")
+                        help="analyze|dkim|harden|spooftest|drill|selftest|report|watch|…")
+    parser.add_argument("args", nargs=argparse.REMAINDER,
+                        help="argumentos del comando (flags tras el comando no los interpreta argparse)")
     ns = parser.parse_args()
+
+    def _flag(name: str) -> str:
+        """--name valor | --name=valor → valor ("") si ausente. Busca en ns.args."""
+        raw = ns.args
+        for i, a in enumerate(raw):
+            if a == name and i + 1 < len(raw):
+                return raw[i + 1]
+            if a.startswith(name + "="):
+                return a.split("=", 1)[1]
+        return ""
+
+    def _strip_flags(vals: list) -> list:
+        """Positional args minus consumed flags and their values."""
+        skip = set()
+        for i, a in enumerate(raw):
+            if a in ("--motif", "--exec", "--relay", "--port", "--imap",
+                     "--imap-wait"):
+                skip.add(i)
+                if i + 1 < len(raw):
+                    skip.add(i + 1)
+            elif a.startswith(("--motif=", "--exec=", "--relay=", "--port=",
+                               "--imap=", "--imap-wait=")):
+                skip.add(i)
+        return [v for i, v in enumerate(vals) if i not in skip]
+
+    # positional args excluding flags: recompute — argparse already lumped all.
+    pos = [a for a in ns.args if not a.startswith("--")]
+    # remove flag VALUES that are non-dash tokens following a flag
+    flag_tokens = {"--motif", "--exec", "--relay", "--port", "--imap", "--imap-wait"}
+    clean = []
+    i = 0
+    while i < len(ns.args):
+        a = ns.args[i]
+        if a in flag_tokens and i + 1 < len(ns.args):
+            i += 2
+            continue
+        if a.startswith(("--motif=", "--exec=", "--relay=", "--port=",
+                         "--imap=", "--imap-wait=")):
+            i += 1
+            continue
+        if a == "--yes" or a == "--save":
+            i += 1
+            continue
+        clean.append(a)
+        i += 1
+    args = clean
+    pos = args
 
     if ns.command is None:
         interactive_repl()
         return
-    cmd, args = ns.command.lower(), ns.args
+    cmd = (ns.command or "").lower()
     if not ns.no_banner:
         show_banner(rainbow=load_config().get("rainbow", True))
     if cmd == "analyze":
-        do_analyze(args[0] if args else "gmail.com", save="--save" in args)
+        do_analyze(args[0] if args else "gmail.com", save="--save" in ns.args)
     elif cmd == "dkim":
         do_dkim_hunt(args[0], selectors=args[1:])
     elif cmd == "harden":
         do_hardening(args[0])
+    elif cmd == "drill":
+        if len(args) < 2:
+            console.print("uso: drill <dominio> <buzon@dominio> [--motif invoice|password|giftcard] "
+                          "[--exec 'CEO'] [--relay smtp.turelay.com --port 587] "
+                          "[--imap imap.tudominio.com[/usuario]] [--imap-wait 45] [--yes]")
+        else:
+            do_drill(
+                args[0], args[1],
+                motif=_flag("--motif") or "invoice",
+                smtp_host=_flag("--relay"),
+                smtp_port=int(_flag("--port") or 0),
+                imap=_flag("--imap"),
+                exec_name=_flag("--exec") or "CEO",
+                yes="--yes" in ns.args)
     elif cmd == "spooftest":
         do_spooftest(args[0] if args else "example.com",
                      motif=args[1] if len(args) > 1 else "invoice")

@@ -1,0 +1,546 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Documentación exhaustiva — MailForge</title>
+  <meta name="description" content="Manual completo de MailForge: cada comando, cada flag y cada opción con ejemplos detallados de sintaxis y pruebas con datos ficticios." />
+  <meta name="theme-color" content="#070a13" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>🛡</text></svg>" />
+  <style>
+    :root{--bg:#070a13;--panel:rgba(18,23,38,.72);--line:rgba(120,140,255,.14);--line-strong:rgba(120,140,255,.3);
+      --text:#e7eaf3;--muted:#8b93a7;--accent:#6c8cff;--accent2:#9a6cff;--accent3:#4dd8ff;--good:#5be49b;
+      --warn:#ffd24d;--bad:#ff5c7a;--font:"Inter",system-ui,sans-serif;--mono:"JetBrains Mono",ui-monospace,Menlo,monospace}
+    *{box-sizing:border-box;margin:0;padding:0}
+    html{scroll-behavior:smooth}
+    body{background:var(--bg);color:var(--text);font-family:var(--font);line-height:1.65;-webkit-font-smoothing:antialiased}
+    .aurora{position:fixed;inset:0;z-index:-2;background:
+      radial-gradient(ellipse 80% 50% at 20% -10%,rgba(108,140,255,.18),transparent),
+      radial-gradient(ellipse 60% 40% at 85% 10%,rgba(154,108,255,.14),transparent),var(--bg)}
+    .container{max-width:1240px;margin:0 auto;padding:0 24px}
+    nav{position:sticky;top:0;z-index:50;backdrop-filter:blur(18px);background:rgba(7,10,19,.78);border-bottom:1px solid var(--line)}
+    .nav-inner{display:flex;align-items:center;gap:22px;height:60px}
+    .brand{display:flex;align-items:center;gap:9px;font-weight:800;font-size:1.1rem;text-decoration:none;color:var(--text)}
+    .brand em{font-style:normal;background:linear-gradient(90deg,var(--accent),var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent}
+    .nav-links{margin-left:auto;display:flex;gap:14px;align-items:center}
+    .nav-links a{color:var(--muted);text-decoration:none;font-size:.9rem;font-weight:600}
+    .nav-links a:hover{color:var(--text)}
+    .layout{display:grid;grid-template-columns:250px minmax(0,1fr);gap:38px;padding:38px 0 80px}
+    .toc{position:sticky;top:80px;align-self:start;max-height:calc(100vh - 100px);overflow-y:auto;padding-right:6px}
+    .toc .grp{color:var(--muted);font-size:.72rem;text-transform:uppercase;letter-spacing:1px;font-weight:800;margin:18px 0 6px}
+    .toc .grp:first-child{margin-top:0}
+    .toc a{display:block;color:var(--muted);text-decoration:none;font-size:.86rem;padding:5px 11px;border-left:2px solid transparent;border-radius:0 8px 8px 0;transition:.15s}
+    .toc a:hover{color:var(--text);background:rgba(120,140,255,.07)}
+    .toc a.act{color:var(--accent3);border-left-color:var(--accent3)}
+    .docs h1{font-size:2.1rem;letter-spacing:-.6px;margin-bottom:8px}
+    .docs .meta{color:var(--muted);font-size:.9rem;margin-bottom:34px}
+    .docs h2{font-size:1.5rem;margin:52px 0 12px;scroll-margin-top:82px;padding-top:14px;border-top:1px solid var(--line)}
+    .docs h2:first-of-type{border-top:none;padding-top:0;margin-top:26px}
+    .docs h3{font-size:1.1rem;margin:26px 0 8px}
+    .docs h4{font-size:.98rem;margin:18px 0 6px;color:var(--accent3)}
+    .docs p,.docs li{color:var(--muted);font-size:.94rem;line-height:1.72}
+    .docs ul,.docs ol{padding-left:22px;margin:9px 0}
+    .docs li{margin:5px 0}
+    code{font-family:var(--mono);font-size:.845em;background:rgba(108,140,255,.1);padding:2px 7px;border-radius:6px;color:var(--accent3)}
+    pre{background:rgba(0,0,0,.5);border:1px solid var(--line);border-radius:12px;padding:17px 19px;overflow-x:auto;margin:13px 0;font-size:.815rem;line-height:1.62;font-family:var(--mono);color:#c9d4ff}
+    pre .c{color:#5f6a85}       /* comentario */
+    pre .p{color:#89ddff}       /* prompt/command */
+    pre .f{color:#c792ea}       /* flag */
+    pre .v{color:#5be49b}       /* valor ficticio */
+    pre .o{color:#ffd24d}       /* salida esperada */
+    table{width:100%;border-collapse:collapse;margin:14px 0;font-size:.88rem}
+    th,td{padding:9px 12px;border:1px solid var(--line);text-align:left;vertical-align:top}
+    th{background:rgba(120,140,255,.08);color:var(--text);font-weight:700;white-space:nowrap}
+    td{color:var(--muted)}
+    td code{white-space:nowrap}
+    .warnbox{border:1px solid rgba(255,210,77,.4);background:rgba(255,210,77,.07);border-radius:12px;padding:14px 18px;margin:15px 0;color:var(--warn);font-size:.92rem}
+    .dangerbox{border:1px solid rgba(255,92,122,.45);background:rgba(255,92,122,.07);border-radius:12px;padding:14px 18px;margin:15px 0;color:var(--bad);font-size:.92rem;line-height:1.65}
+    .tipbox{border:1px solid rgba(91,228,155,.4);background:rgba(91,228,155,.06);border-radius:12px;padding:14px 18px;margin:15px 0;color:var(--good);font-size:.92rem}
+    .pill{display:inline-block;padding:2px 10px;border-radius:999px;font-size:.72rem;font-weight:750;margin-left:6px}
+    .pill.yes{background:rgba(91,228,155,.14);color:var(--good)}
+    .pill.no{background:rgba(255,92,122,.14);color:var(--bad)}
+    .pill.mid{background:rgba(255,210,77,.15);color:var(--warn)}
+    .steps{counter-reset:st;list-style:none;padding-left:0}
+    .steps li{counter-increment:st;position:relative;padding-left:44px;margin:13px 0}
+    .steps li::before{content:counter(st);position:absolute;left:0;top:1px;width:28px;height:28px;border-radius:9px;
+      background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;font-weight:800;display:grid;place-items:center;font-size:.85rem}
+    footer{border-top:1px solid var(--line);padding:32px 0;color:var(--muted);font-size:.85rem}
+    @media(max-width:920px){.layout{grid-template-columns:1fr}.toc{position:static;max-height:none;display:none}}
+  </style>
+</head>
+<body>
+  <div class="aurora"></div>
+
+  <nav>
+    <div class="container nav-inner">
+      <a class="brand" href="index.html">🛡 Mail<em>Forge</em></a>
+      <div class="nav-links">
+        <a href="index.html">Inicio</a>
+        <a href="docs.html" style="color:var(--text)">Documentación</a>
+        <a href="https://github.com/D1se0/emailSpoofingTool">GitHub ↗</a>
+      </div>
+    </div>
+  </nav>
+
+  <div class="container layout">
+    <aside class="toc">
+      <div class="grp">Primeros pasos</div>
+      <a href="#convenciones">Convenciones y datos ficticios</a>
+      <a href="#instalacion">Instalación</a>
+      <a href="#modos">Los 3 modos de uso</a>
+      <div class="grp">Comandos</div>
+      <a href="#analyze">analyze</a>
+      <a href="#dkim">dkim</a>
+      <a href="#spf">spf · dmarc · dnssec · tls · vectors</a>
+      <a href="#harden">harden</a>
+      <a href="#rollout">rollout</a>
+      <a href="#spooftest">spooftest</a>
+      <a href="#drill">drill (envío real)</a>
+      <a href="#imap">IMAP: ¿llegó?</a>
+      <a href="#selftest">selftest</a>
+      <a href="#verify">verify</a>
+      <a href="#report">report</a>
+      <a href="#watch">watch</a>
+      <a href="#repl">Modo interactivo</a>
+      <div class="grp">Consola web local</div>
+      <a href="#web-analyzer">Analyzer</a>
+      <a href="#web-spooflab">Spoof Lab</a>
+      <a href="#web-harden">Hardening</a>
+      <div class="grp">Avanzado</div>
+      <a href="#api">API local</a>
+      <a href="#config">Configuración</a>
+      <a href="#troubleshooting">Solución de problemas</a>
+      <a href="#recetas">Recetas completas</a>
+      <a href="#legal">Uso legítimo</a>
+    </aside>
+
+    <main class="docs">
+      <h1>📚 Manual exhaustivo de MailForge</h1>
+      <p class="meta">v1.2.0 · aplicable a CLI + consola local · todos los ejemplos usan <b>datos 100% ficticios</b></p>
+
+      <h2 id="convenciones">Convenciones y datos ficticios</h2>
+      <p>En TODOS los ejemplos de este manual usamos estos datos inventados. Sustitúyelos por los tuyos al probar:</p>
+      <table>
+        <thead><tr><th>Dato ficticio</th><th>Significado</th><th>Sustitúyelo por</th></tr></thead>
+        <tbody>
+          <tr><td><code>midominio.com</code></td><td>dominio que analizas y <b>que declaras tuyo</b></td><td>tu dominio real</td></tr>
+          <tr><td><code>jefe@midominio.com</code></td><td>buzón tuyo, destinatario de los drills</td><td>tu buzón real</td></tr>
+          <tr><td><code>CE0 Carlos Pérez</code></td><td>directivo suplantado en el drill</td><td>el cargo real de tu empresa</td></tr>
+          <tr><td><code>smtp.turelay.com</code></td><td>tu relay SMTP autorizado (opcional)</td><td>tu servidor/relay de envío</td></tr>
+          <tr><td><code>imap.midominio.com</code></td><td>tu servidor IMAP</td><td>el de tu proveedor</td></tr>
+          <tr><td><code>203.0.113.7</code> / <code>198.51.100.9</code></td><td>IPs de envío legítimas (bloques de documentación RFC 5737)</td><td>tus IPs reales</td></tr>
+        </tbody>
+      </table>
+      <div class="tipbox">💡 La sintaxis de los bloques: <span class="pill yes">lo que tecleas</span> va tras <code>$</code>; las líneas <span class="pill mid">en amarillo/</span><code>→</code> son salida esperada. Los comentarios empiezan con <code>#</code>.</div>
+
+      <h2 id="instalacion">Instalación</h2>
+      <pre><span class="c"># CLI — único requisito: Python 3.9+ (rich es opcional)</span>
+$ git clone https://github.com/D1se0/emailSpoofingTool.git
+$ cd emailSpoofingTool
+$ pip3 install -r requirements.txt
+
+<span class="c"># Consola web local (opcional, Node 18+)</span>
+$ cd server && npm install
+$ npm start
+<span class="o">[mailforge-api] listening on http://localhost:8787</span>
+
+<span class="c"># Verificación rápida</span>
+$ python3 mailforge.py --version
+<span class="o">MailForge 1.2.0</span></pre>
+
+      <h2 id="modos">Los 3 modos de uso</h2>
+      <table>
+        <thead><tr><th>Modo</th><th>Cómo</th><th>Para qué</th></tr></thead>
+        <tbody>
+          <tr><td><b>One-shot</b></td><td><code>python3 mailforge.py &lt;comando&gt; &lt;args&gt;</code></td><td>automatización, scripts, CI</td></tr>
+          <tr><td><b>REPL interactivo</b></td><td><code>python3 mailforge.py</code> (sin argumentos)</td><td>explorar, menús con confirmaciones</td></tr>
+          <tr><td><b>Consola web</b></td><td><code>cd server && npm start</code> → <code>http://localhost:8787</code></td><td>todo lo visual: gauge, tablas, Spoof Lab con un click</td></tr>
+        </tbody>
+      </table>
+
+      <h2 id="analyze">🔍 <code>analyze</code> — análisis completo</h2>
+      <p>El comando central. Ejecuta todas las comprobaciones DNS en cadena y produce el score 0–100, el grado, los vectores viables, los hallazgos y el plan de acción. <b>Nunca envía nada.</b></p>
+      <h4>Sintaxis</h4>
+      <pre>python3 mailforge.py analyze &lt;dominio&gt; [--save] [--no-banner]</pre>
+      <table>
+        <thead><tr><th>Arg/flag</th><th>Obligatorio</th><th>Descripción</th></tr></thead>
+        <tbody>
+          <tr><td><code>&lt;dominio&gt;</code></td><td>sí</td><td>dominio a auditar. Sin <code>http://</code>, sin <code>www</code>, solo el dominio.</td></tr>
+          <tr><td><code>--save</code></td><td>no</td><td>guarda el informe JSON en <code>reports/</code> con timestamp</td></tr>
+        </tbody>
+      </table>
+      <h4>Ejemplo de prueba completo (datos ficticios)</h4>
+      <pre>$ python3 mailforge.py analyze midominio.com
+
+<span class="o"> Dominio: midominio.com   ·   Score: 34/100 (D — Vulnerable)</span>
+<span class="o"> SPF       ███████████░░░░░░░░░░░░░░░░░░░░  36/100</span>
+<span class="o"> DKIM      ██████████████████████░░░░░░░░░░  45/100</span>
+<span class="o"> DMARC     ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░   6/100</span>
+<span class="o"> DNSSEC    ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░   0/100</span>
+<span class="o"> STARTTLS  ██████████████████░░░░░░░░░░░░░░  70/100</span>
+
+<span class="c"># …tablas de postura, hallazgos, vectores y plan de acción…</span>
+
+<span class="o"> ⛔ DMARC ausente — Cualquier tercero puede suplantar este dominio.</span>
+<span class="o"> ⚔ Vectores viables: Spoof directo (95%) · Exact-domain (75%) ·</span>
+<span class="o">   Subdomain escape (80%) · Display-name (30%)</span>
+<span class="o"> 🧭 Plan: publica DMARC p=quarantine; sube SPF a -all; firma DKIM…</span></pre>
+      <h4>Qué comprueba exactamente</h4>
+      <ol>
+        <li><b>SPF</b>: registro TXT, mecanismos, política <code>all</code>, límite de 10 lookups, <code>redirect=</code> (lo sigue), <code>ptr</code> (avisa).</li>
+        <li><b>DKIM</b>: sondea ~60 selectores comunes (incluye estilo fechas de Google: <code>20230601</code>…), sigue CNAMEs, detecta claves revocadas (<code>p=</code> vacío), wildcards vacíos y fuerza &lt;2048 bits.</li>
+        <li><b>DMARC</b>: <code>_dmarc.midominio.com</code> y, si no existe, el del dominio organizacional (p. ej. <code>midominio.co.uk</code> hereda de <code>midominio.co.uk</code>, no de <code>co.uk</code>).</li>
+        <li><b>DNSSEC</b>: DS en la zona padre + AD bit + RRSIG + DNSKEY (triple comprobación).</li>
+        <li><b>STARTTLS real</b>: se conecta a tus MX y negocia TLS de verdad; lee MTA-STS y TLS-RPT; BIMI.</li>
+      </ol>
+
+      <h2 id="dkim">🔑 <code>dkim</code> — caza de selectores</h2>
+      <h4>Sintaxis</h4>
+      <pre>python3 mailforge.py dkim &lt;dominio&gt; [selector1 selector2 …] [--no-banner]</pre>
+      <ul>
+        <li>Sin selectores extra: prueba ~60 comunes automáticamente.</li>
+        <li>Con selectores: los prueba <b>además</b> de los comunes (para claves privadas de tu empresa).</li>
+      </ul>
+      <h4>Ejemplos</h4>
+      <pre><span class="c"># solo lista común</span>
+$ python3 mailforge.py dkim midominio.com
+<span class="o">╭ DKIM · selector1.midominio.com ─────────────╮
+│ Selector  selector1     │ Tipo  rsa          │
+│ Bits      2048          │ Estado ✅           │
+╰─────────────────────────────────────────────╯</span>
+
+<span class="c"># añade TUS selectores privados (los que configuraste en tu ESP)</span>
+$ python3 mailforge.py dkim midominio.com facturacion marketing2024
+
+<span class="c"># ¿solo te interesa uno concreto?</span>
+$ python3 mailforge.py dkim midominio.com k1</pre>
+
+      <h2 id="spf">📄 <code>spf</code>, <code>dmarc</code>, <code>dnssec</code>, <code>tls</code>, <code>vectors</code></h2>
+      <p>Micro-comandos que muestran <b>solo</b> una pieza del análisis (útiles para scripts):</p>
+      <pre>python3 mailforge.py spf     &lt;dominio&gt;    <span class="c"># registro y política all</span>
+python3 mailforge.py dmarc   &lt;dominio&gt;    <span class="c"># registro DMARC crudo</span>
+python3 mailforge.py dnssec  &lt;dominio&gt;    <span class="c"># AD/RRSIG/DS/DNSKEY</span>
+python3 mailforge.py tls     &lt;dominio&gt;    <span class="c"># MX + STARTTLS + MTA-STS</span>
+python3 mailforge.py vectors &lt;dominio&gt;    <span class="c"># tabla de vectores de ataque</span></pre>
+      <h4>Ejemplo</h4>
+      <pre>$ python3 mailforge.py vectors midominio.com
+<span class="o">╔══════════════════════════════╤══════════╤═══════╗
+║ Vector                       │ Factible │ Prob. ║
+╟──────────────────────────────┼──────────┼───────╢
+║ Direct spoof (unaligned)     │    Sí    │  95%  ║
+║ Exact-domain spoof (SPF)     │    Sí    │  75%  ║
+║ Lookalike domain             │    Sí    │  45%  ║
+║ Subdomain escape             │    Sí    │  80%  ║
+║ Display-name impersonation   │    Sí    │  30%  ║
+║ STARTTLS downgrade           │    No    │   0%  ║
+╚══════════════════════════════╧══════════╧═══════╝</span></pre>
+
+      <h2 id="harden">🛠 <code>harden</code> — generador de defensas</h2>
+      <p>Genera los registros DNS listos para pegar en tu proveedor y la configuración de servidor. Por defecto asume lo más estricto (<code>p=reject</code>, <code>-all</code>).</p>
+      <h4>Sintaxis</h4>
+      <pre>python3 mailforge.py harden &lt;dominio&gt;</pre>
+      <p>(En la consola web tienes además <code>/api/harden</code> con <code>ips</code>, <code>selector</code> y <code>policy</code> configurables.)</p>
+      <h4>Salida (recortada, datos ficticios)</h4>
+      <pre><span class="o">╭ Registros DNS recomendados — midominio.com ─────────────────╮
+│ TXT  │ midominio.com │ v=spf1 ip4:203.0.113.7 ip4:198.51.100.9 │
+│      │               │      mx a -all                          │
+│ TXT  │ s1._domainkey.midominio.com │ v=DKIM1; k=rsa; p=&lt;…&gt;    │
+│ TXT  │ _dmarc.midominio.com │ v=DMARC1; p=reject; sp=reject;  │
+│      │               │ adkim=s; aspf=s; rua=mailto:dmarc@…     │
+│ TXT  │ _mta-sts.midominio.com │ v=STSv1; id=sts3f9a1b2c4      │
+│ TXT  │ _smtp._tls.midominio.com │ v=TLSRPTv1; rua=mailto:…     │
+│ A    │ mta-sts.midominio.com │ &lt;IP host policy HTTPS&gt;          │
+╰──────────────────────────────────────────────────────────────╯</span></pre>
+      <p>Después del panel imprime el bloque <code>/etc/postfix/main.cf</code> + <code>/etc/opendkim.conf</code> y la guía de rotación DKIM (ver <a href="#recetas">Recetas</a>).</p>
+
+      <h2 id="rollout">📈 <code>rollout</code> — plan DMARC por fases</h2>
+      <pre>$ python3 mailforge.py rollout midominio.com
+<span class="o">══ Plan de despliegue DMARC en fases — midominio.com ══
+
+FASE 0 (hoy)      v=DMARC1; p=none; rua=mailto:dmarc-reports@midominio.com; fo=1;
+FASE 1            v=DMARC1; p=quarantine; pct=25; …
+FASE 2            p=quarantine; pct=100;
+FASE 3            v=DMARC1; p=reject; sp=reject; adkim=s; aspf=s; pct=100;
+FASE 4            Añade MTA-STS enforce + TLS-RPT + BIMI.
+
+⚠  Nunca saltes de p=none a p=reject directo.</span></pre>
+
+      <h2 id="spooftest">🎭 <code>spooftest</code> — el drill SIN envío</h2>
+      <p>Renderiza el mensaje suplantado, predice el veredicto y genera los comandos de inyección <b>sin enviar nada</b>. Es la puerta de entrada al Spoof Lab.</p>
+      <h4>Sintaxis</h4>
+      <pre>python3 mailforge.py spooftest &lt;dominio&gt; [motivo]
+
+motivo ∈ invoice | password | giftcard   (por defecto: invoice)</pre>
+      <h4>Ejemplo de prueba (datos ficticios)</h4>
+      <pre>$ python3 mailforge.py spooftest midominio.com password
+
+<span class="o">╭ Mensaje suplantado (drill) — midominio.com ─────────────────╮
+│ Received: from attacker-relay.example.net (unknown           │
+│         [203.0.113.66]) by mx.midominio.com with ESMTPS …    │
+│ From: "CE0 Carlos Pérez (aviso urgente)"                     │
+│       &lt;carlos.perez@midominio.com&gt;                           │
+│ Reply-To: drill-collector@mailforge.example.net              │
+│ To: &lt;tu-buzon@midominio.com&gt;                                 │
+│ Subject: Alerta de seguridad: contraseña expirada            │
+│ X-Mailer: MailForge-SpoofLab/1.0 (authorized drill)          │
+└──────────────────────────────────────────────────────────────┘</span>
+
+<span class="o">  Veredicto previsto: BANDEJA DE ENTRADA — suplantable ❗</span>
+
+<span class="o">╭ Comandos de inyección (tú ejecutas, desde TU relay) ────────╮
+│ ▸ Opción 1 — swaks:                                          │
+│     echo '…' | base64 -d > /tmp/spoof-drill.eml              │
+│     swaks --to tu-buzon@midominio.com \                      │
+│           --from bounce@attacker-relay.example.net \         │
+│           --server smtp.midominio.com \                      │
+│           --body /tmp/spoof-drill.eml                        │
+│ ▸ Opción 2 — sendmail: …                                     │
+╰──────────────────────────────────────────────────────────────╯</span></pre>
+      <div class="tipbox">💡 <code>spooftest</code> vs <code>drill</code>: <code>spooftest</code> es la <b>predicción</b> (0 riesgo, 0 paquetes SMTP); <code>drill</code> es la <b>ejecución real</b> (1 email de verdad hacia TU buzón). Us spooftest primero para decidir, y drill para confirmarlo empíricamente.</div>
+
+      <h2 id="drill">🚀 <code>drill</code> — ENVÍO REAL con veredicto del servidor</h2>
+      <div class="dangerbox">
+        ⚠ <b>Este comando envía un email de verdad.</b> Solo apunta a un buzón del dominio que analizas y
+        declaras tuyo (el guard lo bloquea si no). Es tu equivalente local del "test de entrega" de
+        emkei.cz, pero defensivo: el objetivo es comprobar si TU dominio resiste la suplantación.
+      </div>
+      <h4>Sintaxis completa</h4>
+      <pre>python3 mailforge.py drill &lt;dominio&gt; &lt;buzon@dominio&gt;
+       [<span class="f">--motif</span> invoice|password|giftcard]
+       [<span class="f">--exec</span> "CE0 Carlos Pérez"]
+       [<span class="f">--relay</span> smtp.turelay.com] [<span class="f">--port</span> 587]
+       [<span class="f">--imap</span> imap.midominio.com[/jefe@midominio.com] [<span class="f">--imap-wait</span> 45]]
+       [<span class="f">--yes</span>]</pre>
+      <table>
+        <thead><tr><th>Flag</th><th>Por defecto</th><th>Descripción</th></tr></thead>
+        <tbody>
+          <tr><td><code>--motif</code></td><td><code>invoice</code></td><td>plantilla de ingeniería social del drill</td></tr>
+          <tr><td><code>--exec</code></td><td><code>"CEO"</code></td><td>nombre del directivo suplantado en el <code>From:</code></td></tr>
+          <tr><td><code>--relay</code></td><td><i>MX del dominio</i></td><td>tu propio relay. Sin este flag, MailForge entrega directamente al MX del dominio analizado (como haría el atacante).</td></tr>
+          <tr><td><code>--port</code></td><td>25</td><td>puerto SMTP del relay (587 con STARTTLS si usas auth)</td></tr>
+          <tr><td><code>--imap</code></td><td>—</td><td><code>host[/usuario]</code> para verificar por IMAP dónde aterrizó (INBOX vs spam)</td></tr>
+          <tr><td><code>--imap-wait</code></td><td>20</td><td>segundos de espera antes de la consulta IMAP</td></tr>
+          <tr><td><code>--yes</code></td><td>no</td><td>salta la confirmación interactiva (para scripts)</td></tr>
+        </tbody>
+      </table>
+      <h4>Ejemplo 1 — directo al MX del dominio (simula al atacante real)</h4>
+      <pre>$ python3 mailforge.py drill midominio.com jefe@midominio.com \
+      --motif invoice --exec "CE0 Carlos Pérez"
+
+<span class="o">╭ ⚠ CONFIRMACIÓN ─────────────────────────────────────────────╮
+│ DRILL REAL DE SUPLANTACIÓN                                   │
+│   Dominio (declaras ser el propietario): midominio.com       │
+│   Buzón destino (tuyo): jefe@midominio.com                   │
+│   Suplantado: CE0 Carlos Pérez &lt;…@midominio.com&gt;             │
+│   Relay: MX del dominio (directo)                            │
+╰──────────────────────────────────────────────────────────────╯
+¿Confirmas que es tu dominio y quieres enviar el drill? [y/N]: y</span>
+
+<span class="o">╭ Transcripción SMTP — mx1.midominio.com:25 ──────────────────╮
+│ send: 'EHLO drill.mailforge.local'                           │
+│ reply: '250-mx1.midominio.com at your service'               │
+│ send: 'MAIL FROM:&lt;spoof-drill@midominio.com&gt;'                │
+│ reply: '250 2.1.0 OK'                                        │
+│ send: 'RCPT TO:&lt;jefe@midominio.com&gt;'                         │
+│ reply: '250 2.1.5 OK'          ← ¡el MTA aceptó el mensaje!  │
+│ send: 'DATA' … reply: '354 Go ahead' …                       │
+│ reply: '250 2.0.0 OK — queued as 4Zx1q2'                     │
+╰──────────────────────────────────────────────────────────────╯</span>
+
+<span class="o">  ✉ ENVIADO vía mx1.midominio.com:25 → ACEPTADO (250)</span>
+<span class="o">  ACEPTADO por el servidor. Ahora depende de sus filtros:</span>
+<span class="o">  INBOX, cuarentena o spam. Usa --imap para verificar llegada.</span>
+<span class="o">  💡 Comprueba la bandeja y ejecuta: drill --imap … para verificar</span></pre>
+      <h4>Ejemplo 2 — resultado RECHAZADO (tu defensa funciona)</h4>
+      <pre>$ python3 mailforge.py drill midominio-hardened.com jefe@midominio-hardened.com --yes
+<span class="o">  ✖ RECHAZADO por mx1.midominio-hardened.com: jefe@… →
+     550 5.7.26 [internal] Sender DMARC evaluation failed …</span>
+<span class="o">  ✅ Tu DMARC/SPF RECHAZÓ la suplantación (p=reject activo)</span></pre>
+      <p>La misma herramienta, dos veredictos opuestos: así mides <b>antes y después</b> de aplicar el hardening.</p>
+      <h4>Ejemplo 3 — vía tu relay con puerto 587</h4>
+      <pre>$ python3 mailforge.py drill midominio.com jefe@midominio.com \
+      --relay smtp.turelay.com --port 587 --motif giftcard --yes</pre>
+
+      <h2 id="imap">📥 Verificación IMAP — ¿llegó de verdad? ¿a INBOX o a spam?</h2>
+      <p>El envío aceptado (250) solo confirma que el MTA encoló el mensaje. La pregunta de oro de emkei.cz ("¿llegó al destinatario?") se responde con el chequeo IMAP:</p>
+      <h4>Sintaxis</h4>
+      <pre><span class="c"># tras un drill --imap …, o standalone vía API:</span>
+python3 mailforge.py drill midominio.com jefe@midominio.com \
+    --imap imap.midominio.com/jefe@midominio.com --imap-wait 45</pre>
+      <ul>
+        <li>La contraseña se pide por teclado (o <code>MAILFORGE_IMAP_PASS</code> en el entorno). <b>No se guarda ni se imprime jamás.</b></li>
+        <li>Busca el drill por la cabecera <code>X-Mailer: MailForge-SpoofLab</code> en INBOX, Junk, Spam, <code>[Gmail]/Spam</code>…</li>
+      </ul>
+      <h4>Posibles veredictos</h4>
+      <table>
+        <thead><tr><th>Salida</th><th>Interpretación</th><th>Qué hacer</th></tr></thead>
+        <tbody>
+          <tr><td><span class="pill no">📥 LLEGÓ A INBOX</span></td><td>tu dominio NO bloquea la suplantación</td><td>aplica <code>harden</code> YA; repite el drill después</td></tr>
+          <tr><td><span class="pill mid">Llegó a SPAM</span></td><td>filtrado parcial (quarantine o filtros del proveedor)</td><td>sube a p=reject; revisa guías de SPF/DKIM/DMARC de tu ESP</td></tr>
+          <tr><td><span class="pill yes">No localizado</span></td><td>en tránsito, o rechazado (no existe mensaje que buscar)</td><td>espera y reintenta; revisa los logs del MTA / el informe rua</td></tr>
+        </tbody>
+      </table>
+
+      <h2 id="selftest">✉️ <code>selftest</code> — el email técnico autorizado</h2>
+      <p>Variante “limpia” del drill: envía (con confirmación) un email técnico <code>From: mailforge-selftest@tudominio</code> sin firmar y desde IP no autorizada. Útil para ver los fallos reflejados en tu informe <code>rua</code> del día.</p>
+      <pre>$ python3 mailforge.py selftest midominio.com jefe@midominio.com
+<span class="o">  ¿Es tu dominio? [y/N]: y</span>
+<span class="o">  ✉ Enviado a jefe@midominio.com vía mx1.midominio.com</span>
+<span class="o">  Esperado en Authentication-Results: spf=fail dkim=none dmarc=fail</span></pre>
+
+      <h2 id="verify">🔬 <code>verify</code> — verificación DKIM de un email real</h2>
+      <p>Verifica criptográficamente (RSA + Ed25519) las firmas DKIM de un mensaje .eml que pegues. Uso vía API local (ver <a href="#api">API</a>):</p>
+      <pre>$ curl -s -X POST localhost:8787/api/verify \
+    -H 'Content-Type: application/json' \
+    -d '{"raw": "DKIM-Signature: v=1; a=rsa-sha256; d=midominio.com;\r\n …"}' | python3 -m json.tool
+<span class="o">{ "signatures_checked": 1,
+  "results": [ { "domain": "midominio.com", "selector": "s1",
+                 "valid": true, "reason": "signature verifies" } ] }</span></pre>
+
+      <h2 id="report">📄 <code>report</code> — informes JSON/HTML</h2>
+      <pre>python3 mailforge.py report midominio.com json   <span class="c"># → reports/midominio.com-20260923-101500.json</span>
+python3 mailforge.py report midominio.com html   <span class="c"># → informe HTML autocontenido</span></pre>
+
+      <h2 id="watch">👁 <code>watch</code> — monitorización continua</h2>
+      <pre>$ python3 mailforge.py watch midominio.com 300
+<span class="o">  👁 Monitorizando midominio.com cada 300s — Ctrl+C para parar</span>
+<span class="o">  10:15:03 score estable: 78/100</span>
+<span class="o">  10:20:04 score 78 → 41   ← ¡alguien quitó el DMARC!</span></pre>
+
+      <h2 id="repl">🖥 Modo interactivo (REPL)</h2>
+      <pre>$ python3 mailforge.py
+<span class="o">  [banner arcoíris]</span>
+<span class="o">  Escribe help para ver comandos · quit para salir</span>
+<span class="p">mailforge&gt;</span> analyze midominio.com
+<span class="p">mailforge&gt;</span> drill midominio.com jefe@midominio.com
+<span class="p">mailforge&gt;</span> config          <span class="c"># banner arcoíris sí/no, autoguardar informes</span>
+<span class="p">mailforge&gt;</span> quit</pre>
+
+      <h2 id="web-analyzer">🖥 Consola web — Analyzer</h2>
+      <ol class="steps">
+        <li><code>cd server && npm install && npm start</code> → abre <code>http://localhost:8787</code>.</li>
+        <li>Pestaña <b>Analyzer</b> → escribe <code>midominio.com</code> → <b>Escanear</b>.</li>
+        <li>Verás el gauge animado, las 5 barras por pilar, la matriz de vectores, hallazgos y el plan.</li>
+        <li>Botón <b>🛠 Generar configuración defensiva</b> para saltar a Hardening con el dominio precargado.</li>
+      </ol>
+
+      <h2 id="web-spooflab">🎭 Consola web — Spoof Lab (envío real incluido)</h2>
+      <ol class="steps">
+        <li>Pestaña <b>Spoof Lab</b> → dominio <code>midominio.com</code> → elige motivo (💳/🔐/🎁) y directivo → <b>Generar drill</b>.</li>
+        <li>Revisa el <b>veredicto previsto</b> y el mensaje .eml (botón copiar).</li>
+        <li>Bloque <b>🚀 Envío real</b>: escribe tu buzón <code>jefe@midominio.com</code>, opcionalmente tu relay → <b>✉ Enviar drill real</b>.</li>
+        <li>Lee el veredicto del servidor: <b style="color:var(--good)">⛔ RECHAZADO</b> (defensa OK) o <b style="color:var(--warn)">✅ ACEPTADO (250)</b> + transcripción SMTP completa en pantalla.</li>
+        <li>Si fue aceptado: introduce <code>imap.midominio.com</code> + contraseña → <b>📥 ¿Llegó?</b> → te dice si está en INBOX o en spam. La contraseña vive solo en memoria.</li>
+      </ol>
+
+      <h2 id="web-harden">🛠 Consola web — Hardening</h2>
+      <ol class="steps">
+        <li>Pestaña <b>Hardening</b> → dominio + tus IPs de envío (p. ej. <code>203.0.113.7, 198.51.100.9</code>).</li>
+        <li>Elige selector DKIM (<code>s1</code>) y política DMARC (<code>reject</code>).</li>
+        <li><b>Generar</b> → copia cada registro con un click en tu proveedor DNS.</li>
+        <li>Config Postfix/OpenDKIM y guía de rotación DKIM al final de la página.</li>
+      </ol>
+
+      <h2 id="api">🔌 API local (referencia completa)</h2>
+      <table>
+        <thead><tr><th>Endpoint</th><th>Método</th><th>Parámetros</th><th>Devuelve</th></tr></thead>
+        <tbody>
+          <tr><td><code>/api/health</code></td><td>GET</td><td>—</td><td><code>{ok, python}</code></td></tr>
+          <tr><td><code>/api/analyze?domain=</code></td><td>GET</td><td><code>domain</code></td><td>análisis completo + score + vectores</td></tr>
+          <tr><td><code>/api/dkim?domain=</code></td><td>GET</td><td><code>domain</code></td><td>claves DKIM encontradas</td></tr>
+          <tr><td><code>/api/spooftest?domain=&amp;motif=&amp;exec_name=</code></td><td>GET</td><td><code>motif</code>: invoice|password|giftcard</td><td>mensaje + veredicto previsto + comandos</td></tr>
+          <tr><td><code>/api/spooflab/send</code></td><td>POST</td><td><code>{domain, to, motif?, exec_name?, smtp_host?}</code></td><td><code>{sent, verdict, mx, transcript[], …}</code> — <b>envío real</b></td></tr>
+          <tr><td><code>/api/spooflab/check</code></td><td>POST</td><td><code>{imap_host, imap_user, imap_pass, wait_seconds?}</code></td><td><code>{checked, verdict, inbox, junk, folders_hit[]}</code></td></tr>
+          <tr><td><code>/api/harden?domain=&amp;ips=&amp;selector=&amp;policy=</code></td><td>GET</td><td>—</td><td>registros DNS + postfix + dkim_guide</td></tr>
+          <tr><td><code>/api/rollout?domain=</code></td><td>GET</td><td>—</td><td>plan por fases</td></tr>
+          <tr><td><code>/api/selftest</code></td><td>POST</td><td><code>{domain, to, dry_run?}</code></td><td>email técnico autorizado</td></tr>
+          <tr><td><code>/api/verify</code></td><td>POST</td><td><code>{raw}</code> (≤1MB)</td><td>verificación DKIM del mensaje</td></tr>
+        </tbody>
+      </table>
+      <h4>Ejemplo end-to-end con curl (datos ficticios)</h4>
+      <pre><span class="c"># 1) analizar</span>
+$ curl -s "localhost:8787/api/analyze?domain=midominio.com" | jq .score
+<span class="o">34</span>
+<span class="c"># 2) predecir</span>
+$ curl -s "localhost:8787/api/spooftest?domain=midominio.com&motif=invoice" | jq -r .predicted_verdict
+<span class="o">BANDEJA DE ENTRADA — suplantable ❗</span>
+<span class="c"># 3) enviar de verdad (in-domain guard activo)</span>
+$ curl -s -X POST localhost:8787/api/spooflab/send -H 'Content-Type: application/json' \
+    -d '{"domain":"midominio.com","to":"jefe@midominio.com","motif":"invoice"}' | jq .verdict
+<span class="o">"accepted"</span>
+<span class="c"># 4) verificar llegada</span>
+$ curl -s -X POST localhost:8787/api/spooflab/check -H 'Content-Type: application/json' \
+    -d '{"imap_host":"imap.midominio.com","imap_user":"jefe@midominio.com","imap_pass":"•••"}' \
+    | jq -r .verdict
+<span class="o">📥 LLEGÓ A INBOX — tu dominio NO bloquea el spoof ❗</span>
+<span class="c"># 5) aplicar harden → repetir 3-4 → veredicto debe cambiar a RECHAZADO</span></pre>
+
+      <h2 id="config">⚙️ Configuración y entorno</h2>
+      <table>
+        <thead><tr><th>Variable</th><th>Dónde</th><th>Para qué</th></tr></thead>
+        <tbody>
+          <tr><td><code>MAILFORGE_IMAP_PASS</code></td><td>shell</td><td>contraseña IMAP para <code>drill --imap</code> sin prompt</td></tr>
+          <tr><td><code>PORT</code></td><td>server</td><td>puerto de la API (8787)</td></tr>
+          <tr><td><code>PYTHON</code></td><td>server</td><td>binario python del puente (por defecto <code>python3</code>)</td></tr>
+          <tr><td><code>ALLOWED_ORIGIN</code></td><td>server</td><td>origen CORS adicional</td></tr>
+          <tr><td><code>.mailforge.json</code></td><td>repo (lo crea <code>config</code>)</td><td>rainbow, autosave de informes</td></tr>
+        </tbody>
+      </table>
+
+      <h2 id="troubleshooting">🩺 Solución de problemas</h2>
+      <table>
+        <thead><tr><th>Síntoma</th><th>Causa</th><th>Solución</th></tr></thead>
+        <tbody>
+          <tr><td><code>no se pudo contactar ningún servidor</code></td><td>tu red/ISP bloquea el puerto 25 saliente</td><td>usa <code>--relay smtp.turelay.com --port 587</code>, o ejecuta desde un VPS; el análisis DNS sigue funcionando (usa DoH)</td></tr>
+          <tr><td><code>Name or service not known</code></td><td>DNS local roto</td><td>no pasa nada: el core cae a DoH (dns.google/Cloudflare) automáticamente</td></tr>
+          <tr><td>DKIM “sin claves públicas”</td><td>tu selector no es común</td><td>pásalo explícito: <code>dkim midominio.com mi-selector</code></td></tr>
+          <tr><td><code>recipient outside analyzed domain</code></td><td>guard anti-phishing</td><td>es una feature: el drill solo apunta al dominio analizado</td></tr>
+          <tr><td>IMAP: <code>login fallido</code></td><td>contraseña de aplicación requerida</td><td>con Gmail/Outlook genera una “contraseña de aplicación”, no la normal</td></tr>
+          <tr><td>drill aceptado pero no llega</td><td>filters en cola / greylisting</td><td>espera 1-5 min, sube <code>--imap-wait 120</code>, revisa informe rua</td></tr>
+        </tbody>
+      </table>
+
+      <h2 id="recetas">🧾 Recetas completas (de principio a fin)</h2>
+      <h3>Receta A — auditar y blindar tu dominio en 30 minutos</h3>
+      <ol class="steps">
+        <li><b>Baseline:</b> <code>analyze midominio.com</code> → anota score (p. ej. 34/D).</li>
+        <li><b>Predecir el daño:</b> <code>spooftest midominio.com invoice</code> → verás "INBOX — suplantable".</li>
+        <li><b>Generar defensas:</b> <code>harden midominio.com</code> → publica los 6 registros en tu DNS.</li>
+        <li><b>Firmar DKIM:</b> sigue la guía impresa por harden (opendkim-genkey, dos selectores s1/s2).</li>
+        <li><b>Rollout DMARC:</b> <code>rollout midominio.com</code> → publica FASE 0 hoy, sube cada 2-4 semanas.</li>
+        <li><b>Confirmar empíricamente:</b> <code>drill midominio.com jefe@midominio.com --imap imap.midominio.com --yes</code> → debe pasar de "ACEPTADO" a "RECHAZADO 550".</li>
+        <li><b>Verificar llegada:</b> el chequeo IMAP no debe encontrar el mensaje (fue rechazado).</li>
+        <li><b>Re-auditar:</b> <code>analyze midominio.com</code> → objetivo A (≥85). Guarda el HTML: <code>report midominio.com html</code>.</li>
+      </ol>
+      <h3>Receta B — demostración para tu dirección (sin tocar producción)</h3>
+      <ol class="steps">
+        <li><code>spooftest midominio.com password</code> en pantalla durante la reunión: el mensaje suplantado + veredicto.</li>
+        <li>Si el veredicto es "INBOX", ejecuta el <code>drill</code> real a TU buzón: cuando llegue al inbox delante de todos, queda claro el riesgo.</li>
+        <li>Cierra con <code>report midominio.com html</code> y el plan de hardening.</li>
+      </ol>
+
+      <h2 id="legal">⚖️ Uso legítimo</h2>
+      <div class="dangerbox">
+        <b>Permitido:</b> analizar tu dominio o dominios con permiso · drills de envío real <b>solo a buzones del dominio analizado</b> · investigación publicada.<br />
+        <b>Prohibido:</b> dirigir drills a buzones de terceros · suplantar dominios ajenos · phishing · spam.<br /><br />
+        El envío real a un dominio ajeno sin autorización puede constituir un delito (fraude informático, suplantación de identidad, violación de la LSSI/GDPR según jurisdicción). El guard in-domain de MailForge lo bloquea por diseño; evitarlo deliberadamente es responsabilidad tuya y única.
+      </div>
+      <div class="tipbox">✅ Este es el mismo enfoque de dmarcian, EasyDMARC o el "spoof test" de MXToolbox: ver el ataque desde la perspectiva del atacante, pero ejecutado por el dueño del dominio sobre su propia infraestructura.</div>
+    </main>
+  </div>
+
+  <footer><div class="container">🛡 MailForge v1.2.0 · MIT · <a href="https://github.com/D1se0/emailSpoofingTool" style="color:var(--accent3)">GitHub</a> · <a href="index.html" style="color:var(--accent3)">Inicio</a></div></footer>
+
+  <script>
+    // active TOC on scroll
+    const links = [...document.querySelectorAll('.toc a')];
+    const secs = links.map(a => document.querySelector(a.getAttribute('href'))).filter(Boolean);
+    const onScroll = () => {
+      let cur = secs[0];
+      for (const s of secs) if (s.getBoundingClientRect().top < 120) cur = s;
+      links.forEach(a => a.classList.toggle('act', a.getAttribute('href') === '#' + (cur && cur.id)));
+    };
+    addEventListener('scroll', onScroll, { passive: true }); onScroll();
+  </script>
+</body>
+</html>

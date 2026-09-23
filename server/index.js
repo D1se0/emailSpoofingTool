@@ -206,6 +206,40 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, data);
     }
 
+    if (pathname === "/api/spooflab/send" && req.method === "POST") {
+      const body = JSON.parse((await readBody(req)) || "{}");
+      const domain = (body.domain || "").toString().toLowerCase().trim();
+      const to = (body.to || "").toString().toLowerCase().trim();
+      if (!validDomain(domain)) return send(res, 400, { error: "invalid domain" });
+      if (!/^[^@\s]{1,64}@[^@\s]{1,253}$/.test(to)) {
+        return send(res, 400, { error: "invalid recipient" });
+      }
+      if (!to.endsWith("@" + domain)) {
+        return send(res, 403, {
+          error: "recipient outside analyzed domain",
+          detail: "El envío real del drill solo apunta a buzones del dominio analizado (que el operador declara propio).",
+        });
+      }
+      const data = await callCore("drill_send", {
+        domain, to,
+        exec_name: body.exec_name, motif: body.motif,
+        smtp_host: body.smtp_host, smtp_port: body.smtp_port,
+        smtp_user: body.smtp_user, smtp_pass: body.smtp_pass,
+        helo: body.helo,
+      }, 120000);
+      return send(res, 200, data);
+    }
+
+    if (pathname === "/api/spooflab/check" && req.method === "POST") {
+      const body = JSON.parse((await readBody(req)) || "{}");
+      const data = await callCore("drill_check", {
+        imap_host: body.imap_host, imap_user: body.imap_user,
+        imap_pass: body.imap_pass, wait_seconds: body.wait_seconds,
+        imap_port: body.imap_port,
+      }, 320000);
+      return send(res, 200, data);
+    }
+
     if (pathname === "/api/rollout") {
       const domain = (parsed.query.domain || "").toString().toLowerCase().trim();
       if (!validDomain(domain)) return send(res, 400, { error: "invalid domain" });

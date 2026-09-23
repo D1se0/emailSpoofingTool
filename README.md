@@ -51,17 +51,127 @@ cd server && npm install && npm start        # API + web → http://localhost:87
 cd ../web && npm install && npm run build    # bundle React servido por la API
 ```
 
-## 🧭 CLI
+## 🧭 CLI — ejemplos detallados
+
+> Todos los ejemplos usan **datos 100% ficticios** (`midominio.com`, `jefe@midominio.com`, `CE0 Carlos Pérez`, `203.0.113.7`). Sustitúyelos por los tuyos. Manual aún más extenso: [web de documentación](https://d1se0.github.io/emailSpoofingTool/docs.html) · [`docs.md`](docs.md).
+
+### 1) Análisis completo
 
 ```bash
-python3 mailforge.py analyze gmail.com        # análisis completo + score
-python3 mailforge.py dkim gmail.com google s1 # caza selectores concretos
-python3 mailforge.py harden midominio.com     # registros DNS + config servidores
-python3 mailforge.py rollout midominio.com    # plan DMARC por fases
-python3 mailforge.py spooftest midominio.com invoice  # drill red-team (sin envío)
-python3 mailforge.py report midominio.com html
-python3 mailforge.py watch midominio.com 60
-python3 mailforge.py                          # modo interactivo
+$ python3 mailforge.py analyze midominio.com --save
+
+ Dominio: midominio.com   ·   Score: 34/100 (D — Vulnerable)
+ SPF       ███████████░░░░░░░░░░░░░░░░░░░░  36/100
+ DMARC     ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░   6/100   ← sin DMARC
+ DNSSEC    ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░   0/100
+
+ ⛔ DMARC ausente — Cualquier tercero puede suplantar este dominio.
+ ⚔ Vectores viables: Spoof directo (95%) · Subdomain escape (80%)
+ 💾 Informe guardado: reports/midominio.com-20260923-101500.json
+```
+
+### 2) Ver el ataque desde la perspectiva del atacante (SIN enviar nada)
+
+```bash
+$ python3 mailforge.py spooftest midominio.com password
+
+╭ Mensaje suplantado (drill) — midominio.com ════════════════╗
+│ From: "CE0 Carlos Pérez (aviso urgente)"                   │
+│       <carlos.perez@midominio.com>        ← ¡suplantado!   │
+│ Reply-To: drill-collector@mailforge.example.net ← secuestrado│
+│ Subject: Alerta de seguridad: contraseña expirada          │
+╚═════════════════════════════════════════════════════════════╝
+
+  Veredicto previsto: BANDEJA DE ENTRADA — suplantable ❗
+```
+
+### 3) **ENVÍO REAL** del drill — ¿llega al destinatario o lo rechazan? 🚀
+
+```bash
+# Directo al MX del dominio (como un atacante real) hacia TU buzón:
+$ python3 mailforge.py drill midominio.com jefe@midominio.com \
+      --motif invoice --exec "CE0 Carlos Pérez"
+
+╭ ⚠ CONFIRMACIÓN ═════════════════════════════════════════════╗
+│ DRILL REAL DE SUPLANTACIÓN                                   │
+│   Dominio (declaras ser el propietario): midominio.com       │
+│   Buzón destino (tuyo): jefe@midominio.com                   │
+│   Suplantado: CE0 Carlos Pérez <…@midominio.com>             │
+╰══════════════════════════════════════════════════════════════╝
+¿Confirmas que es tu dominio y quieres enviar el drill? [y/N]: y
+
+╭ Transcripción SMTP — mx1.midominio.com:25 ═══════════════════╮
+│ send: 'MAIL FROM:<spoof-drill@midominio.com>'                │
+│ reply: '250 2.1.0 OK'                                        │
+│ send: 'RCPT TO:<jefe@midominio.com>'                         │
+│ reply: '250 2.1.5 OK'          ← el MTA ACEPTÓ el mensaje    │
+│ reply: '250 2.0.0 OK — queued as 4Zx1q2'                     │
+╰══════════════════════════════════════════════════════════════╝
+
+  ✉ ENVIADO vía mx1.midominio.com:25 → ACEPTADO (250)
+  💡 Verifica dónde aterrizó con --imap
+```
+
+```bash
+# ¿Llegó de verdad a INBOX o fue a spam? (el "¿llegó?" de emkei.cz, defensivo):
+$ python3 mailforge.py drill midominio.com jefe@midominio.com \
+      --imap imap.midominio.com/jefe@midominio.com --imap-wait 45 --yes
+
+  📥 LLEGÓ A INBOX — tu dominio NO bloquea el spoof ❗
+     ↳ INBOX: 1 mensaje(s)
+```
+
+```bash
+# El mismo drill tras aplicar el hardening → el veredicto cambia:
+$ python3 mailforge.py drill midominio.com jefe@midominio.com --yes
+
+  ✖ RECHAZADO por mx1.midominio.com:
+     550 5.7.26 Sender DMARC evaluation failed
+  ✅ Tu DMARC/SPF RECHAZÓ la suplantación (p=reject activo)
+```
+
+<details>
+<summary><b>Todas las flags de <code>drill</code></b></summary>
+
+| Flag | Default | Descripción |
+|---|---|---|
+| `--motif` | `invoice` | plantilla: `invoice` · `password` · `giftcard` |
+| `--exec` | `"CEO"` | directivo suplantado en el From |
+| `--relay` | MX del dominio | tu propio relay SMTP |
+| `--port` | `25` | puerto del relay (587 con auth) |
+| `--imap` | — | `host[/usuario]` para verificar llegada por IMAP |
+| `--imap-wait` | `20` | segundos de espera antes de consultar IMAP |
+| `--yes` | no | salta la confirmación (scripts) |
+
+La contraseña IMAP se pide por teclado o con `MAILFORGE_IMAP_PASS` (nunca se guarda ni imprime).
+
+</details>
+
+### 4) Hardening + rollout
+
+```bash
+$ python3 mailforge.py harden midominio.com
+
+╭ Registros DNS recomendados — midominio.com ═════════════════╗
+│ TXT │ midominio.com          │ v=spf1 ip4:203.0.113.7 … -all │
+│ TXT │ s1._domainkey.midomin… │ v=DKIM1; k=rsa; p=<…>         │
+│ TXT │ _dmarc.midominio.com   │ v=DMARC1; p=reject; sp=reject │
+│ TXT │ _mta-sts.midominio.com │ v=STSv1; id=sts3f9a1b2c4      │
+╰══════════════════════════════════════════════════════════════╝
+
+$ python3 mailforge.py rollout midominio.com   # plan none→quarantine→reject
+```
+
+### 5) Resto de comandos
+
+```bash
+python3 mailforge.py dkim midominio.com facturacion marketing2024  # caza selectores
+python3 mailforge.py vectors midominio.com     # tabla de 8 vectores de ataque
+python3 mailforge.py spf midominio.com         # detalle SPF (también: dmarc|dnssec|tls)
+python3 mailforge.py report midominio.com html # informe HTML autocontenido
+python3 mailforge.py watch midominio.com 300   # avisa si el score cambia
+python3 mailforge.py selftest midominio.com jefe@midominio.com  # email técnico
+python3 mailforge.py                           # modo interactivo (REPL)
 ```
 
 ## 🖥 Consola local (web de testeo)

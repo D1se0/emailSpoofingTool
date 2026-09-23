@@ -378,6 +378,42 @@ class TestHardening:
         out = _json.loads(line[8:]) if line else {}
         assert "outside" in out.get("error", "")
 
+    def test_drill_send_guard_out_of_domain(self):
+        out = hardening.send_spoof_drill("x.com", "victim@other.com")
+        assert out["verdict"] == "blocked"
+        assert "fuera de dominio" in out["error"]
+
+    def test_drill_send_no_mx(self):
+        out = hardening.send_spoof_drill("dominio-inexistente-mf-xyz.test",
+                                         "me@dominio-inexistente-mf-xyz.test")
+        assert out["verdict"] == "error"
+        assert "no hay a quién enviar" in out["error"]
+
+    def test_transcript_smtp_class(self):
+        c = hardening._TranscriptSMTP()
+        c._print_debug("send:", "EHLO test")
+        assert c.transcript == ["send: EHLO test"]
+
+    def test_imap_check_requires_credentials(self):
+        out = hardening.check_drill_arrival("imap.invalid-mf-xyz.test",
+                                            "u@x.com", "bad", timeout=5)
+        assert out["checked"] is False
+        assert "error" in out
+
+    def test_release_notes_for_new_tag_exist(self):
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        assert os.path.exists(os.path.join(root, ".github",
+                                           "RELEASE_NOTES_v1.2.0.md"))
+
+    def test_public_site_docs_page_exists(self):
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        docs = os.path.join(root, "site", "docs.html")
+        assert os.path.exists(docs)
+        html = open(docs, encoding="utf-8").read()
+        for needle in ("drill", "spooftest", "--imap", "spooflab/send",
+                       "datos 100% ficticios"):
+            assert needle in html, f"docs.html sin '{needle}'"
+
 
 # ---------------------------------------------------------------------------
 # Network tests (marked; skipped with -m "not network")

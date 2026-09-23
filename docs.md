@@ -101,3 +101,20 @@ python3 -m pytest tests/ -m "network" -q       # integración DNS real
 cd server && node --test test/api.test.js      # puente Node↔Python
 cd web && npm run build && node --test test/   # web
 ```
+
+## 9. Spoof Lab: predicción vs envío real (v1.2.0)
+
+| Comando | Qué hace | Riesgo |
+|---|---|---|
+| `spooftest <dom> [motivo]` | renderiza el mensaje suplantado + veredicto previsto + comandos para ti | cero (no conecta) |
+| `drill <dom> <buzon@dom> [flags]` | **envío real** al MX del dominio (o `--relay`), transcripción SMTP y veredicto (250 aceptado / 5xx rechazado) | 1 email real a TU buzón |
+| `drill … --imap host[/user]` | tras el envío, consulta por IMAP si el drill llegó a INBOX o spam | credenciales solo en memoria |
+
+Flags del drill: `--motif invoice|password|giftcard` · `--exec "CE0 Carlos Pérez"` ·
+`--relay smtp.turelay.com --port 587` · `--imap imap.midominio.com/jefe@midominio.com` ·
+`--imap-wait 45` · `--yes`.
+
+Endpoints nuevos: `POST /api/spooflab/send` y `POST /api/spooflab/check` (guard in-domain → 403 si el
+destinatario no pertenece al dominio analizado).
+
+Manual exhaustivo: `site/docs.html` (publicado en Pages → /docs.html).

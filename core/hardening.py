@@ -13,16 +13,21 @@ SPDX-License-Identifier: MIT
 from __future__ import annotations
 
 import base64
+import imaplib
 import os
+import re
 import secrets
 import smtplib
 import socket
 import textwrap
+import time
 from email.message import EmailMessage
 from email.utils import formatdate, make_msgid
 
 __all__ = ["generate_records", "generate_postfix_config", "generate_dkim_guide",
-           "generate_rollout_plan", "build_selftest_message", "send_selftest"]
+           "generate_rollout_plan", "build_selftest_message", "send_selftest",
+           "build_spoof_preview", "generate_injection_commands", "send_spoof_drill",
+           "check_drill_arrival"]
 
 
 def generate_records(domain: str, spf_ips: list = None, dkim_selector: str = "s1",
@@ -278,6 +283,225 @@ def generate_injection_commands(domain: str, to_addr: str,
         · Cuarentena/spam      → p=quarantine o filtros parciales ⚠
         · En INBOX             → TU DOMINIO ES SUPLANTABLE — aplica el hardening ❌
     """)
+
+
+# --------------------------------------------------------------------------
+# Spoof Lab — REAL delivery drill (in-domain only).
+#
+# Sends the spoofed drill message for real, directly to the MX of the
+# ANALYZED domain (or the operator's own relay), captures the full SMTP
+# transcript and reports the server's verdict: accepted (250) vs rejected
+# (5xx). Optionally verifies actual arrival via IMAP (inbox vs junk).
+# HARD GUARD: the recipient must belong to the analyzed domain — the domain
+# the operator declares as their own. No third-party recipients, ever.
+# --------------------------------------------------------------------------
+
+class _TranscriptSMTP(smtplib.SMTP):
+    """SMTP client that captures the whole conversation (client+server lines)."""
+    def __init__(self, *a, **kw):
+        super().__init__(*a, **kw)
+        self.transcript = []
+
+    def _print_debug(self, *args):
+        try:
+            self.transcript.append(" ".join(str(a) for a in args).strip())
+        except Exception:
+            pass
+
+
+def _resolve_target_mx(domain: str) -> list:
+    from . import dnsx
+    entries = []
+    for r in (dnsx.smart_resolve(domain, "MX") or []):
+        data = (r.get("data") or "").strip().rstrip(".")
+        if not data:
+            continue
+        if "pref" in r:
+            pref, host = r.get("pref", 0), data
+        else:
+            parts = data.split(None, 1)
+            try:
+                pref, host = int(parts[0]), (parts[1] if len(parts) > 1 else data)
+            except (ValueError, IndexError):
+                pref, host = 0, data
+        if host:
+            entries.append((pref, host.rstrip(".")))
+    entries.sort()
+    if not entries:
+        # No MX: RFC 5321 fallback = A record of the domain itself.
+        a = dnsx.smart_resolve(domain, "A")
+        if a:
+            entries.append((0, domain))
+    return [(p, h) for p, h in entries]
+
+
+def send_spoof_drill(domain: str, to_addr: str, exec_name: str = "CEO",
+                     motif: str = "invoice", smtp_host: str = "",
+                     smtp_port: int = 0, smtp_user: str = "",
+                     smtp_pass: str = "", helo_name: str = "drill.mailforge.local",
+                     timeout: int = 25) -> dict:
+    """Send the spoofed drill for real and report the server verdict.
+
+    Envelope-from is spoof-drill@<domain> (exact-domain spoof) from an
+    unauthorized IP → expected Authentication-Results: spf=fail dkim=none
+    dmarc=fail. Whether it is ACCEPTED (then inbox/junk is up to the filters)
+    or REJECTED (5xx) is exactly what the drill reveals.
+    """
+    domain = domain.lower().rstrip(".")
+    recipient_domain = to_addr.rsplit("@", 1)[-1].lower().rstrip(".") \
+        if "@" in to_addr else ""
+    if recipient_domain != domain:
+        return {"sent": False, "verdict": "blocked", "error":
+                "destinatario fuera de dominio: el drill real solo puede "
+                "enviarse a un buzón del dominio analizado (que declaras tuyo)"}
+
+    preview = build_spoof_preview(domain, exec_name=exec_name, motif=motif)
+    msg_bytes = preview["message"].encode("utf-8")
+    mail_from = f"spoof-drill@{domain}"
+
+    # Target: operator relay (if given) or the domain's own MX chain.
+    targets = []
+    if smtp_host:
+        targets.append((0, smtp_host))
+    else:
+        targets = _resolve_target_mx(domain)
+    if not targets:
+        return {"sent": False, "verdict": "error", "error":
+                f"sin MX ni A resoluble para '{domain}' — no hay a quién enviar"}
+
+    last_err = None
+    for _pref, host in targets[:3]:
+        port = smtp_port or 25
+        client = None
+        try:
+            client = _TranscriptSMTP(host, port, timeout=timeout)
+            client.set_debuglevel(1)
+            code, banner = client.connect(host, port)
+            client.ehlo(helo_name)
+            features = client.esmtp_features
+            # Opportunistic STARTTLS (like real senders) — unverified ctx is
+            # fine: we are the sender probing THEIR MTA.
+            if "starttls" in features:
+                try:
+                    import ssl as _ssl
+                    client.starttls(context=_ssl._create_unverified_context())
+                    client.ehlo(helo_name)
+                except smtplib.SMTPException:
+                    pass
+            if smtp_user and smtp_pass:
+                client.login(smtp_user, smtp_pass)
+
+            refused = client.sendmail(mail_from, [to_addr], msg_bytes)
+            client.quit()
+            return {
+                "sent": True, "verdict": "accepted",
+                "mx": host, "port": port,
+                "envelope_from": mail_from,
+                "recipient": to_addr,
+                "message_id": re.search(r"Message-ID:\s*<([^>]+)>",
+                                        preview["message"]).group(1),
+                "transcript": client.transcript,
+                "recipients_refused": {k: list(v) for k, v in (refused or {}).items()},
+                "profile": preview["profile"],
+                "note": ("ACEPTADO por el servidor. Ahora depende de sus filtros: "
+                         "INBOX, cuarentena o spam. Usa --imap para verificar llegada.")
+                        if not refused else
+                        ("aceptado con avisos para algunos destinatarios"),
+            }
+        except smtplib.SMTPRecipientsRefused as exc:
+            codes = {k: list(v) for k, v in exc.recipients.items()}
+            transcript = client.transcript if client else []
+            try:
+                client.quit()
+            except Exception:
+                pass
+            return {"sent": False, "verdict": "rejected", "mx": host, "port": port,
+                    "envelope_from": mail_from, "recipient": to_addr,
+                    "recipients_refused": codes, "transcript": transcript,
+                    "profile": preview["profile"],
+                    "error": f"RECHAZADO por {host}: " + "; ".join(
+                        f"{k} → {v[0]} {v[1].decode('utf-8', 'replace')[:120]}"
+                        for k, v in codes.items()),
+                    "note": "✅ Tu DMARC/SPF RECHAZÓ la suplantación (p=reject activo)"}
+        except (smtplib.SMTPSenderRefused, smtplib.SMTPDataError) as exc:
+            transcript = client.transcript if client else []
+            try:
+                client.quit()
+            except Exception:
+                pass
+            return {"sent": False, "verdict": "rejected", "mx": host, "port": port,
+                    "envelope_from": mail_from, "recipient": to_addr,
+                    "transcript": transcript, "profile": preview["profile"],
+                    "error": f"rechazado por {host}: {exc.smtp_code} {exc.smtp_error.decode('utf-8', 'replace')[:140] if isinstance(exc.smtp_error, bytes) else exc.smtp_error}",
+                    "note": "El MTA rechazó la transacción (protección activa)"}
+        except (smtplib.SMTPException, OSError, socket.timeout) as exc:
+            last_err = f"{type(exc).__name__}: {exc}"
+            if client:
+                try:
+                    client.quit()
+                except Exception:
+                    pass
+            continue   # next MX
+    return {"sent": False, "verdict": "error", "error":
+            f"no se pudo contactar ningún servidor de {domain}: {last_err}",
+            "profile": preview["profile"]}
+
+
+IMAP_FOLDERS = ("INBOX", "Junk", "Spam", "Junk Email", "[Gmail]/Spam",
+                "[Gmail]/All Mail")
+
+
+def check_drill_arrival(imap_host: str, imap_user: str, imap_pass: str,
+                        wait_seconds: int = 0, port: int = 993,
+                        timeout: int = 20) -> dict:
+    """Verify (via IMAP) where the drill actually landed: inbox, junk or nowhere.
+    Credentials are used in-memory only and never appear in the output."""
+    if wait_seconds:
+        time.sleep(min(wait_seconds, 300))
+    try:
+        imap = imaplib.IMAP4_SSL(imap_host, port, timeout=timeout)
+    except (OSError, imaplib.IMAP4.error, socket.timeout) as exc:
+        return {"checked": False, "error": f"IMAP no disponible: {exc}"}
+    try:
+        imap.login(imap_user, imap_pass)
+    except imaplib.IMAP4.error as exc:
+        try:
+            imap.logout()
+        except Exception:
+            pass
+        return {"checked": False, "error": "login IMAP fallido (credenciales?)"}
+
+    criteria = '(HEADER X-Mailer "MailForge-SpoofLab")'
+    found = {"inbox": False, "junk": False, "folders_hit": []}
+    for folder in IMAP_FOLDERS:
+        try:
+            status, _ = imap.select(folder, readonly=True)
+            if status != "OK":
+                continue
+            status, data = imap.search(None, criteria)
+            if status == "OK" and data and data[0].split():
+                ids = data[0].split()
+                if folder == "INBOX":
+                    found["inbox"] = True
+                else:
+                    found["junk"] = True
+                found["folders_hit"].append({"folder": folder, "count": len(ids)})
+            imap.close()
+        except imaplib.IMAP4.error:
+            continue   # folder does not exist in this server
+    try:
+        imap.logout()
+    except Exception:
+        pass
+    if found["inbox"]:
+        found["verdict"] = "LLEGÓ A INBOX — tu dominio NO bloquea el spoof ❗"
+    elif found["junk"]:
+        found["verdict"] = "Llegó a SPAM/CUARENTENA — filtrado parcial ⚠"
+    else:
+        found["verdict"] = ("No localizado aún — puede estar en tránsito o "
+                            "rechazado; reintenta con --imap-wait 60")
+    found["checked"] = True
+    return found
 
 
 # --------------------------------------------------------------------------

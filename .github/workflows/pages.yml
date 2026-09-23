@@ -24,7 +24,8 @@ jobs:
         run: |
           mkdir -p _pages
           cp site/index.html _pages/
-          cp site/index.html _pages/404.html   # SPA-less fallback
+          cp site/docs.html _pages/
+          cp site/index.html _pages/404.html   # fallback
 
       - uses: actions/upload-pages-artifact@v3
         with:

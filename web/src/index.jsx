@@ -249,19 +249,59 @@ function SpoofLab() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [data, setData] = useState(null);
+  // real-send state
+  const [to, setTo] = useState("");
+  const [relay, setRelay] = useState("");
+  const [sending, setSending] = useState(false);
+  const [sendResult, setSendResult] = useState(null);
+  const [imap, setImap] = useState("");
+  const [imapPass, setImapPass] = useState("");
+  const [checking, setChecking] = useState(false);
+  const [checkResult, setCheckResult] = useState(null);
 
   const run = async (e) => {
     e && e.preventDefault();
     if (!domain.trim()) return;
     setLoading(true); setError(""); setData(null);
+    setSendResult(null); setCheckResult(null);
     try {
       const qs = `?domain=${encodeURIComponent(domain.trim().toLowerCase())}&motif=${motif}&exec_name=${encodeURIComponent(execName || "CEO")}`;
       setData(await api(`/api/spooftest${qs}`));
+      setTo(`buzon@${domain.trim().toLowerCase()}`);
     } catch (err) { setError(err.message); } finally { setLoading(false); }
   };
 
-  const verdictColor = (v) => v.includes("RECHAZADO") ? "var(--good)"
-    : v.includes("CUARENTENA") ? "var(--warn)" : "var(--bad)";
+  const sendNow = async () => {
+    setSending(true); setSendResult(null);
+    try {
+      setSendResult(await api("/api/spooflab/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ domain: domain.trim().toLowerCase(), to: to.trim(),
+          motif, exec_name: execName || "CEO", smtp_host: relay.trim() || undefined }),
+      }));
+    } catch (err) { setSendResult({ verdict: "error", error: err.message }); }
+    finally { setSending(false); }
+  };
+
+  const checkInbox = async () => {
+    setChecking(true); setCheckResult(null);
+    try {
+      const [host, user] = imap.includes("/") ? imap.split("/") : [imap, to];
+      setCheckResult(await api("/api/spooflab/check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imap_host: host, imap_user: user || to,
+          imap_pass: imapPass, wait_seconds: 20 }),
+      }));
+    } catch (err) { setCheckResult({ checked: false, error: err.message }); }
+    finally { setChecking(false); }
+  };
+
+  const verdictColor = (v) => (v || "") + "" === "" ? "var(--muted)"
+    : (v.includes("ACEPTADO") || v.includes("INBOX")) ? "var(--bad)"
+    : (v.includes("RECHAZADO") || v.includes("REJECT")) ? "var(--good)"
+    : "var(--warn)";
 
   return (
     <section className="container section">
@@ -302,6 +342,66 @@ function SpoofLab() {
 
       {data && (
         <div className="fade-up">
+          {/* ── REAL SEND ─────────────────────────────────────────── */}
+          <div className="card" style={{ marginTop: 0, marginBottom: 18, borderColor: "rgba(255,92,122,.4)" }}>
+            <h3>🚀 Envío real del drill</h3>
+            <p style={{ color: "var(--muted)", fontSize: "0.86rem", marginBottom: 12 }}>
+              Envía el mensaje suplantado <b>de verdad</b> al buzón indicado (debe ser
+              del dominio analizado) — directo al MX del dominio o vía tu relay. Verás la
+              transcripción SMTP completa y el veredicto del servidor: aceptado (250) o rechazado (5xx).
+            </p>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
+              <input placeholder="buzon@tudominio.com" value={to} onChange={(e) => setTo(e.target.value)}
+                style={{ flex: 1, minWidth: 220, background: "rgba(7,10,19,0.6)", border: "1px solid var(--line-strong)", color: "var(--text)", borderRadius: 10, padding: "11px 14px", fontFamily: "var(--mono)" }} />
+              <input placeholder="relay propio (opcional, ej. smtp.turelay.com)" value={relay} onChange={(e) => setRelay(e.target.value)}
+                style={{ flex: 1, minWidth: 220, background: "rgba(7,10,19,0.6)", border: "1px solid var(--line-strong)", color: "var(--text)", borderRadius: 10, padding: "11px 14px", fontFamily: "var(--mono)" }} />
+              <button className="btn btn-primary" onClick={sendNow} disabled={sending || !to.includes("@")}>
+                {sending ? <><span className="spinner" /> Enviando…</> : "✉ Enviar drill real"}
+              </button>
+            </div>
+
+            {sendResult && (
+              <div className="fade-up" style={{ marginTop: 14 }}>
+                <div style={{ padding: "12px 16px", borderRadius: 10, border: `1px solid ${verdictColor(sendResult.verdict === "accepted" ? "ACEPTADO" : sendResult.verdict === "rejected" ? "RECHAZADO" : "")}`, background: "rgba(0,0,0,.3)" }}>
+                  <b style={{ color: verdictColor(sendResult.verdict === "accepted" ? "ACEPTADO" : sendResult.verdict === "rejected" ? "RECHAZADO" : "") }}>
+                    {sendResult.sent ? "✅ ACEPTADO POR EL SERVIDOR (250)" :
+                     sendResult.verdict === "rejected" ? "⛔ RECHAZADO POR EL SERVIDOR" :
+                     sendResult.verdict === "blocked" ? "🚫 bloqueado (fuera de dominio)" : "⚠ error de envío"}
+                  </b>
+                  {sendResult.mx && <span style={{ color: "var(--muted)" }}> — vía {sendResult.mx}:{sendResult.port}</span>}
+                  {sendResult.error && <div style={{ color: "var(--muted)", fontSize: "0.85rem", marginTop: 6 }}>{sendResult.error}</div>}
+                  {sendResult.note && <div style={{ fontSize: "0.85rem", marginTop: 6 }}>{sendResult.note}</div>}
+                </div>
+                {sendResult.transcript && sendResult.transcript.length > 0 && (
+                  <pre style={{ fontSize: "0.72rem", background: "rgba(0,0,0,.45)", border: "1px solid var(--line)", borderRadius: 10, padding: 14, overflowX: "auto", marginTop: 10, lineHeight: 1.55, color: "#c9d4ff" }}>
+                    {sendResult.transcript.slice(-26).join("\n")}
+                  </pre>
+                )}
+                {sendResult.sent && (
+                  <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                    <input placeholder="imap.tudominio.com[/usuario]" value={imap} onChange={(e) => setImap(e.target.value)}
+                      style={{ background: "rgba(7,10,19,0.6)", border: "1px solid var(--line-strong)", color: "var(--text)", borderRadius: 10, padding: "10px 13px", fontFamily: "var(--mono)", minWidth: 200 }} />
+                    <input type="password" placeholder="contraseña IMAP (no se guarda)" value={imapPass} onChange={(e) => setImapPass(e.target.value)}
+                      style={{ background: "rgba(7,10,19,0.6)", border: "1px solid var(--line-strong)", color: "var(--text)", borderRadius: 10, padding: "10px 13px", fontFamily: "var(--mono)", minWidth: 190 }} />
+                    <button className="btn btn-ghost btn-sm" onClick={checkInbox} disabled={checking || !imap.trim()}>
+                      {checking ? <><span className="spinner" /> Buscando…</> : "📥 ¿Llegó? (IMAP)"}
+                    </button>
+                  </div>
+                )}
+                {checkResult && (
+                  <div className="fade-up" style={{ marginTop: 10, padding: "11px 15px", borderRadius: 10, background: "rgba(0,0,0,.3)", border: "1px solid var(--line)", fontWeight: 700, color: checkResult.checked ? verdictColor(checkResult.verdict) : "var(--warn)" }}>
+                    {checkResult.checked ? `📥 ${checkResult.verdict}` : `⚠ ${checkResult.error}`}
+                    {checkResult.folders_hit && checkResult.folders_hit.length > 0 && (
+                      <div style={{ color: "var(--muted)", fontWeight: 400, fontSize: "0.82rem", marginTop: 4 }}>
+                        {checkResult.folders_hit.map(f => `${f.folder}: ${f.count}`).join(" · ")}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
           <div className="card" style={{ borderLeft: `4px solid ${verdictColor(data.predicted_verdict)}` }}>
             <h3>🔮 Veredicto previsto</h3>
             <p style={{ fontSize: "1.25rem", fontWeight: 800, color: verdictColor(data.predicted_verdict), margin: "8px 0" }}>
