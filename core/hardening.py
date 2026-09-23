@@ -300,51 +300,86 @@ def compose_spoof_email(from_name: str = "", from_email: str = "",
             "has_attachments": False, "warnings": warnings}
 
 
+def _shq(s: str) -> str:
+    """Shell single-quote escape: 'CE0 don't' → 'CE0 don'\''t'."""
+    return "'" + str(s).replace("'", "'\\''") + "'"
+
+
 def generate_freeform_commands(from_email: str, to: str, from_name: str = "",
                                subject: str = "", text: str = "",
                                reply_to: str = "", attachments: list = None,
                                priority: str = "normal",
                                smtp_host: str = "") -> str:
-    """swaks/sendmail commands that implement exactly the composed message,
-    for the operator to run from their own machine/relay."""
+    """Ready-to-run swaks/sendmail commands implementing exactly the composed
+    message, for the operator to run from their own machine.
+
+    Option 1 uses per-header flags (--h-From:, --h-Subject:, …). Option 2
+    ships the exact .eml (adjuntos incluidos) via `swaks --data @file`, so
+    no local MTA is needed.
+    """
     composed = compose_spoof_email(from_name=from_name, from_email=from_email,
                                    to=to, subject=subject, text=text,
                                    reply_to=reply_to,
                                    attachments=attachments, priority=priority)
     b64 = base64.b64encode(composed["message"].encode()).decode()
-    server_arg = (f"--server {smtp_host} " if smtp_host else "")  # sin --server → MX del destinatario
-    reply_line = f"\n          --h-Reply-To: '{reply_to}' \\" if reply_to else ""
-    prio_flag = " --priority high" if priority == "high" else ""
-    att_note = (f"\n    · El mensaje lleva {len(attachments)} adjunto(s): con swaks "
-                f"se envían vía el .eml (Opción 2). Con la Opción 1, usa "
-                f"--attach @ruta-del-fichero") if attachments else ""
+    from_domain = from_email.rsplit("@", 1)[-1]
+    recip_domain = to.rsplit("@", 1)[-1] if "@" in to else ""
+
+    # Target server: operator relay if given; else the recipient's first MX
+    # (best-effort DNS; if unresolvable, swaks falls back to MX lookup itself).
+    server = smtp_host
+    if not server and recip_domain:
+        try:
+            mx = _resolve_target_mx(recip_domain)
+            server = mx[0][1] if mx else ""
+        except Exception:
+            server = ""
+    server_line = f" \\\n      --server {_shq(server)}" if server else ""
+
+    name = from_name or from_email
+    reply_line = (f" \\\n      --h-Reply-To: {_shq(reply_to)}" if reply_to else "")
+    prio_lines = ""
+    if priority == "high":
+        prio_lines = " \\\n      --h-X-Priority: '1 (Highest)' \\\n      --h-Importance: 'High'"
+    elif priority == "low":
+        prio_lines = " \\\n      --h-X-Priority: '5 (Lowest)' \\\n      --h-Importance: 'Low'"
+    att_note = (f"\n    · El mensaje lleva {len(attachments)} adjunto(s): usa la "
+                f"Opción 2 (--data con el .eml completo). En la Opción 1 añade "
+                f"--attach @ruta-del-fichero por cada uno.") if attachments else ""
+
+    common = f"--ehlo {_shq(from_domain)}{server_line} -tls"
     return textwrap.dedent(f"""\
     ══ Spoof Lab — inyección manual (ejecútalo TÚ desde tu equipo) ══
 
-    From visible : {from_name or from_email} <{from_email}>
+    From visible : {name} <{from_email}>
     Envelope     : {from_email}
     To           : {to}
     Subject      : {subject}
     Adjuntos     : {len(attachments or [])}
-    Ruta         : swaks entrega al MX del DESTINATARIO ({to.rsplit('@',1)[-1]}){att_note}
+    Ruta         : {('relay propio ' + server) if smtp_host else ('MX del destinatario: ' + (server or recip_domain))}{att_note}
 
     ▸ Opción 1 — swaks directo (cabeceras controladas):
         swaks \\
-          --to '{to}' \\
-          --from '{from_email}' \\{prio_flag}
-          {server_arg}\\
-          --h-From: '{from_name or from_email} <{from_email}>' \\{reply_line}
-          --h-Subject: '{subject}' \\
+          --to {_shq(to)} \\
+          --from {_shq(from_email)} \\
+          {common} \\
+          --h-From: {_shq(f"{name} <{from_email}>")}{reply_line}{prio_lines} \\
+          --h-Subject: {_shq(subject)} \\
           --h-X-Mailer: 'MailForge-SpoofLab/1.2 (authorized drill)' \\
-          --body '{text[:180]}'
+          --body {_shq(text[:1800])}
 
-    ▸ Opción 2 — mensaje .eml exacto (con adjuntos) + sendmail -t:
+    ▸ Opción 2 — mensaje .eml EXACTO (byte a byte, adjuntos incluidos) vía swaks:
         echo '{b64}' | base64 -d > /tmp/spoof-drill.eml
+        swaks --to {_shq(to)} --from {_shq(from_email)} {common} --data @/tmp/spoof-drill.eml
+
+      (alternativa con MTA local — requiere sendmail/postfix instalado:)
         sendmail -t -f {from_email} < /tmp/spoof-drill.eml
 
     ▸ Notas:
-        · El puerto 25 saliente suele estar bloqueado en conexiones domésticas
-          → VPS o relay autorizado (--server … --port 587).
+        · -tls usa STARTTLS oportunista (como un emisor real) y --ehlo presenta
+          tu dominio en el saludo SMTP.
+        · Si el puerto 25 saliente está bloqueado en tu red → VPS o relay
+          autorizado (--server smtp.turelay.com --port 587).
         · Marca 'X-Mailer: … (authorized drill)' identifica el drill — quítala
           solo si sabes lo que haces.
 
