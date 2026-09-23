@@ -1,0 +1,22 @@
+{
+  "name": "mailforge-web",
+  "version": "1.0.0",
+  "description": "MailForge web dashboard — React SPA (landing, analyzer, hardening, docs)",
+  "private": true,
+  "scripts": {
+    "build": "esbuild src/index.jsx --bundle --minify --define:process.env.NODE_ENV='\"production\"' --outfile=build/app.js --loader:.jsx=jsx",
+    "dev": "esbuild src/index.jsx --bundle --define:process.env.NODE_ENV='\"development\"' --outfile=build/app.js --watch --loader:.jsx=jsx",
+    "test": "node --test test/"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "esbuild": "^0.21.0"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT"
+}

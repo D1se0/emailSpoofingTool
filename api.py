@@ -1,0 +1,137 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+MailForge api.py — JSON bridge between the Node server and the Python core.
+
+Protocol: `python3 api.py <action> [json-payload]` → prints exactly one line
+starting with `##JSON##` followed by compact JSON. Any other stdout line is
+considered diagnostics; stderr is for errors.
+
+SPDX-License-Identifier: MIT
+"""
+from __future__ import annotations
+
+import json
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from core import dkim, scorer, hardening  # noqa: E402
+
+JSON_PREFIX = "##JSON##"
+
+
+def emit(obj) -> None:
+    print(JSON_PREFIX + json.dumps(obj, ensure_ascii=False, default=str))
+
+
+def _valid_domain(d: str) -> bool:
+    import re
+    return bool(re.match(r"^(?=.{1,253}$)(?!-)[a-z0-9-]{1,63}(\.[a-z0-9-]{1,63})*\.[a-z]{2,63}$",
+                         d.lower().strip()))
+
+
+def _out_of_domain_guard(domain: str, to: str) -> bool:
+    return to.lower().rstrip(".") != domain.lower().rstrip(".") \
+        and not to.lower().endswith("@" + domain.lower().rstrip("."))
+
+
+def main() -> None:
+    if len(sys.argv) < 2:
+        emit({"error": "usage: api.py <action> [payload-json]"})
+        return
+    action = sys.argv[1]
+    payload = {}
+    if len(sys.argv) > 2:
+        try:
+            payload = json.loads(sys.argv[2])
+        except json.JSONDecodeError:
+            emit({"error": "payload is not valid JSON"})
+            return
+
+    try:
+        if action == "analyze":
+            domain = (payload.get("domain") or "").lower().strip()
+            if not _valid_domain(domain):
+                return emit({"error": "invalid domain"})
+            emit(scorer.analyze_domain(domain).to_dict())
+
+        elif action == "dkim":
+            domain = (payload.get("domain") or "").lower().strip()
+            if not _valid_domain(domain):
+                return emit({"error": "invalid domain"})
+            keys = dkim.guess_selectors(domain)
+            emit({"domain": domain, "keys": [k.to_dict() for k in keys]})
+
+        elif action == "harden":
+            domain = (payload.get("domain") or "").lower().strip()
+            if not _valid_domain(domain):
+                return emit({"error": "invalid domain"})
+            recs = hardening.generate_records(
+                domain,
+                spf_ips=[str(i) for i in (payload.get("ips") or [])][:20],
+                dkim_selector=(payload.get("selector") or "s1").strip(),
+                dmarc_policy=(payload.get("policy") or "reject"),
+                rua=(payload.get("rua") or ""))
+            emit({"domain": domain, "records": recs,
+                  "postfix": hardening.generate_postfix_config(
+                      domain, payload.get("selector") or "s1"),
+                  "dkim_guide": hardening.generate_dkim_guide(
+                      domain, payload.get("selector") or "s1")})
+
+        elif action == "rollout":
+            domain = (payload.get("domain") or "").lower().strip()
+            if not _valid_domain(domain):
+                return emit({"error": "invalid domain"})
+            emit({"domain": domain,
+                  "plan": hardening.generate_rollout_plan(
+                      domain, payload.get("rua") or "")})
+
+        elif action == "selftest":
+            domain = (payload.get("domain") or "").lower().strip()
+            to = (payload.get("to") or "").lower().strip()
+            if not _valid_domain(domain):
+                return emit({"error": "invalid domain"})
+            if _out_of_domain_guard(domain, to):
+                return emit({"error": "recipient outside analyzed domain",
+                             "detail": "self-test is restricted to in-domain mailboxes"})
+            emit(hardening.send_selftest(
+                domain, to,
+                smtp_host=(payload.get("smtp_host") or ""),
+                dry_run=bool(payload.get("dry_run"))))
+
+        elif action == "verify":
+            raw = payload.get("raw") or ""
+            if not raw or len(raw) > 1024 * 1024:
+                return emit({"error": "raw email required (max 1MB)"})
+            raw_bytes = raw.encode("utf-8", "replace") if "\r\n" not in raw \
+                else raw.encode("utf-8", "replace")
+            results = []
+            import re as _re
+            sig_values = _re.findall(
+                r"DKIM-Signature:\s*([^\r\n]*(?:\r\n[ \t][^\r\n]*)*)",
+                raw, flags=_re.IGNORECASE)
+            for sv in sig_values[:5]:
+                sig = dkim.parse_dkim_header(" ".join(
+                    ln.strip() for ln in sv.splitlines()))
+                if not sig.domain or not sig.selector:
+                    results.append({"domain": sig.domain, "selector": sig.selector,
+                                    "valid": False, "reason": "missing d=/s="})
+                    continue
+                key, _raw, err = dkim.fetch_dkim_key(sig.selector, sig.domain)
+                if key is None:
+                    results.append({"domain": sig.domain, "selector": sig.selector,
+                                    "valid": False, "reason": f"key lookup failed: {err}"})
+                    continue
+                results.append(dkim.verify_dkim(raw_bytes, sig, key))
+            emit({"signatures_checked": len(results), "results": results})
+
+        else:
+            emit({"error": f"unknown action '{action}'"})
+    except Exception as exc:  # noqa: BLE001
+        emit({"error": f"{type(exc).__name__}: {exc}"})
+
+
+if __name__ == "__main__":
+    main()

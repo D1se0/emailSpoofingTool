@@ -1,0 +1,2 @@
+# Core analysis engine: stdlib-only. Rich is the single optional dependency.
+rich>=13.7.0

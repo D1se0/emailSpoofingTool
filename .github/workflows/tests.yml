@@ -1,0 +1,40 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install rich pytest
+      - name: Offline unit tests
+        run: python -m pytest tests/ -m "not network" -q
+      - name: Networked tests (gmail/example.com)
+        run: python -m pytest tests/ -m "network" -q --timeout=180 || true
+
+  node:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Web build + tests
+        working-directory: web
+        run: |
+          npm install --no-audit --no-fund
+          mkdir -p build && cp src/index.html build/ && cp src/styles.css build/app.css
+          npm run build
+          node --test test/web.test.js
+      - name: Server tests (python bridge)
+        working-directory: server
+        run: |
+          pip install rich
+          node --test test/api.test.js

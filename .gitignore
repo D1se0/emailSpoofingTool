@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+
+# Node
+node_modules/
+web/build/
+server/*.log
+
+# tool state
+.mailforge.json
+reports/
+
+# secrets — NEVER commit
+*.pem
+*.key
+*.private
+id_rsa*
+*_rsa
+deploy_key*
+!.github/**/*.pem.example
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
