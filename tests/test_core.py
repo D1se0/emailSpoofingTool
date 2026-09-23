@@ -366,7 +366,7 @@ class TestHardening:
         cmds = hardening.generate_injection_commands("x.com", "me@x.com")
         assert "swaks" in cmds and "sendmail" in cmds
         assert "me@x.com" in cmds
-        assert "NO uses el MX" in cmds                      # advertencia explícita
+        assert "no lo dirijas nunca a terceros" in cmds     # advertencia explícita
 
     def test_api_spooftest_guard(self):
         import json as _json, subprocess as _sp, sys as _sys

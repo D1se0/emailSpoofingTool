@@ -379,10 +379,13 @@ def do_hardening(domain: str, ips=(), selector="s1", policy="reject"):
            border="blue")
 
 
-def do_spooftest(domain: str, to_addr: str = "", motif: str = "invoice"):
+def do_spooftest(domain: str, to_addr: str = "", motif: str = "invoice",
+                 exec_name: str = "CEO"):
     """Red-team drill: render spoofed message + injection commands (no send)."""
     from core import dmarc as _dmarc, spf as _spf
-    preview = hardening.build_spoof_preview(domain, motif=motif)
+    preview = hardening.build_spoof_preview(domain, motif=motif,
+                                            exec_name=exec_name,
+                                            to_addr=to_addr or None)
     to_addr = to_addr or f"tu-buzon@{domain}"
 
     pol_label, pol_color = "desconocido", "dim"
@@ -405,7 +408,8 @@ def do_spooftest(domain: str, to_addr: str = "", motif: str = "invoice"):
     else:
         print(f"  Veredicto previsto: {pol_label}")
     _panel("Comandos de inyección (tú ejecutas, desde TU relay)",
-           Text(hardening.generate_injection_commands(domain, to_addr)),
+           Text(hardening.generate_injection_commands(
+               domain, to_addr, exec_name=exec_name, motif=motif)),
            border="yellow")
 
 
@@ -604,7 +608,10 @@ def interactive_repl() -> None:
                 do_hardening(args[0])
         elif cmd == "spooftest":
             if args:
-                do_spooftest(args[0], motif=args[1] if len(args) > 1 else "invoice")
+                do_spooftest(args[0], to_addr=_flag("--to"),
+                             exec_name=_flag("--exec") or "CEO",
+                             motif=args[1] if len(args) > 1
+                             and not args[1].startswith("--") else "invoice")
         elif cmd == "drill":
             if len(args) >= 2:
                 if RICH:
@@ -742,8 +749,10 @@ def main() -> None:
                 exec_name=_flag("--exec") or "CEO",
                 yes="--yes" in ns.args)
     elif cmd == "spooftest":
-        do_spooftest(args[0] if args else "example.com",
-                     motif=args[1] if len(args) > 1 else "invoice")
+        do_spooftest(args[0] if args else "example.com", to_addr=_flag("--to"),
+                     exec_name=_flag("--exec") or "CEO",
+                     motif=args[1] if len(args) > 1
+                     and not args[1].startswith("--") else "invoice")
     elif cmd == "selftest":
         if len(args) < 2:
             console.print("uso: selftest <dominio> <buzon@dominio>")

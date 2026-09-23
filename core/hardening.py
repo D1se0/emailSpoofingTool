@@ -196,12 +196,23 @@ def generate_rollout_plan(domain: str, rua: str = "") -> str:
 # posture stops the attack (inbox vs quarantine vs reject).
 # --------------------------------------------------------------------------
 
+def _ascii_localpart(name: str) -> str:
+    """'CE0 Carlos Pérez' → 'ce0.carlos.perez' (SMTP-safe local part)."""
+    import unicodedata
+    norm = unicodedata.normalize("NFKD", name)
+    ascii_only = "".join(c for c in norm if not unicodedata.combining(c))
+    cleaned = "".join(c if (c.isalnum() or c in ".-") else "."
+                      for c in ascii_only.lower().replace(" ", "."))
+    return re.sub(r"\.+", ".", cleaned).strip(".") or "ceo"
+
+
 def build_spoof_preview(domain: str, exec_name: str = "CEO",
-                        exec_email: str = "", motif: str = "invoice") -> dict:
+                        exec_email: str = "", motif: str = "invoice",
+                        to_addr: str = "") -> dict:
     """Craft a would-be spoofing email against `domain` (red-team drill).
-    Returns the RFC5322 message, the attack profile and the verdict prediction
-    from the last known posture (caller passes posture for precision)."""
-    exec_email = exec_email or f"{exec_name.lower().replace(' ', '.')}@{domain}"
+    Returns the RFC5322 message (plus its parts), the attack profile and the
+    verdict prediction from the last known posture."""
+    exec_email = exec_email or f"{_ascii_localpart(exec_name)}@{domain}"
     motifs = {
         "invoice": ("URGENTE: Factura vencida #INV-8841 — pago hoy",
                     "Adjunto la factura correspondiente. Por favor liquidar antes "
@@ -216,15 +227,17 @@ def build_spoof_preview(domain: str, exec_name: str = "CEO",
                      "a este mensaje antes de las 17:00."),
     }
     subject, body = motifs.get(motif, motifs["invoice"])
+    from_header = f"\"{exec_name} (aviso urgente)\" <{exec_email}>"
+    to_header = to_addr or f"tu-buzon@{domain}"
 
     # Deliberately forged headers: external MTA, no DKIM, From inside domain.
     spoofed = (
         f"Received: from attacker-relay.example.net (unknown [203.0.113.66])\r\n"
         f"\tby mx.{domain} with ESMTPS id DRILL-MESSAGE;\r\n"
         f"\t{formatdate(localtime=False)}\r\n"
-        f"From: \"{exec_name} (aviso urgente)\" <{exec_email}>\r\n"
+        f"From: {from_header}\r\n"
         f"Reply-To: drill-collector@mailforge.example.net\r\n"
-        f"To: <tu-buzon@{domain}>\r\n"
+        f"To: <{to_header}>\r\n"
         f"Subject: {subject}\r\n"
         f"Date: {formatdate(localtime=False)}\r\n"
         f"Message-ID: <drill-{secrets.token_hex(6)}@attacker-relay.example.net>\r\n"
@@ -236,7 +249,7 @@ def build_spoof_preview(domain: str, exec_name: str = "CEO",
     )
 
     attack_profile = {
-        "envelope_from": f"bounce@attacker-relay.example.net",
+        "envelope_from": f"spoof-drill@{domain}",
         "header_from": exec_email,
         "spf_will_be": "fail (relay externo no está en tu SPF)",
         "dkim_will_be": "none (sin firma)",
@@ -244,44 +257,70 @@ def build_spoof_preview(domain: str, exec_name: str = "CEO",
         "technique": "display-name impersonation + Reply-To hijack",
     }
     return {"message": spoofed, "profile": attack_profile,
-            "domain": domain, "motif": motif}
+            "domain": domain, "motif": motif,
+            "from_header": from_header, "to_header": to_header,
+            "subject": subject, "body": body,
+            "env_from": f"spoof-drill@{domain}"}
 
 
 def generate_injection_commands(domain: str, to_addr: str,
-                                smtp_host: str = "") -> str:
+                                smtp_host: str = "", exec_name: str = "CEO",
+                                motif: str = "invoice") -> str:
     """Exact commands for the operator to inject the drill message from
-    their own machine/relay. MailForge never connects to the target MX here."""
-    host = smtp_host or f"smtp.{domain}"
-    msg = build_spoof_preview(domain)["message"]
-    b64 = base64.b64encode(msg.encode()).decode()
+    their own machine/relay. MailForge never sends out-of-domain: these
+    commands are executed BY THE OPERATOR against a mailbox THEY control."""
+    pv = build_spoof_preview(domain, exec_name=exec_name, motif=motif,
+                             to_addr=to_addr)
+    hdr_from = pv["from_header"]
+    env_from = pv["env_from"]
+    subject = pv["subject"]
+    body_line = pv["body"].splitlines()[0]
+    b64 = base64.b64encode(pv["message"].encode()).decode()
+    server_arg = (f"--server {smtp_host} " if smtp_host else "")  # sin --server → MX del destinatario
     return textwrap.dedent(f"""\
-    ══ Spoof Lab — inyección del drill (TODO corre de TU cuenta) ══
+    ══ Spoof Lab — inyección manual del drill (TODO corre de TU cuenta) ══
 
-    Objetivo : {to_addr}   (buzón tuyo del dominio {domain})
-    Reenviador: {host} — usa un relay AUTORIZADO para ti (propio, Mailtrap,
-                smtp2go de pruebas...). NO uses el MX de {domain} si no es tuyo.
+    Objetivo   : {to_addr}
+    Suplantado : {hdr_from}
+    Envelope   : {env_from}
+    Ruta       : swaks entrega al MX del DESTINATARIO ({to_addr.rsplit('@',1)[-1]})
+                 — no necesitas ser relay de {domain}.
 
-    ▸ Opción 1 — swaks (recomendado):
-        # guarda el mensaje:
+    ▸ Opción 1 — swaks (impersonación explícita con cabeceras -h-):
+        swaks \\
+          --to '{to_addr}' \\
+          --from '{env_from}' \\
+          {server_arg}\\
+          --h-From: '{hdr_from}' \\
+          --h-Reply-To: 'drill-collector@mailforge.example.net' \\
+          --h-Subject: '{subject}' \\
+          --h-X-Mailer: 'MailForge-SpoofLab/1.0 (authorized drill)' \\
+          --body '{body_line}'
+
+    ▸ Opción 2 — mensaje .eml completo + sendmail -t (usa SUS cabeceras):
         echo '{b64}' | base64 -d > /tmp/spoof-drill.eml
-        swaks --to {to_addr} \\
-              --from bounce@attacker-relay.example.net \\
-              --server {host} \\
-              --body /tmp/spoof-drill.eml \\
-              --header 'X-MailForge-Drill: authorized'
+        cat /tmp/spoof-drill.eml | sendmail -t -f {env_from}
 
-    ▸ Opción 2 — sendmail (relay local):
-        echo '{b64}' | base64 -d | sendmail -t -f bounce@attacker-relay.example.net
+    ▸ Notas de red:
+        · El puerto 25 saliente suele estar bloqueado en ADSL/fibra doméstica
+          → ejecuta desde un VPS, o usa tu relay autorizado:
+          añade --server smtp.turelay.com --port 587
+        · NO envíes al MX de {domain} como 'relay de otros': el RCPT va al
+          dominio del DESTINATARIO.
 
-    ▸ Qué observar después (en los 2 minutos siguientes):
-        1. ¿Inbox, spam o rechazado?     → eficacia del filtro
-        2. Authentication-Results:       → spf=fail dkim=none dmarc=fail
-        3. Informe rua del día:          → el drill aparecerá como fallo DMARC
+    ▸ Qué observar después:
+        1. ¿Llegó al buzón, spam o rechazado? → eficacia de TU protección
+        2. Authentication-Results del receptor: spf=fail dkim=none dmarc=fail
+        3. Informe rua del día: el drill aparecerá como fallo DMARC
 
     ▸ Interpretación:
         · Rechazado (550)      → p=reject funciona  ✅
         · Cuarentena/spam      → p=quarantine o filtros parciales ⚠
-        · En INBOX             → TU DOMINIO ES SUPLANTABLE — aplica el hardening ❌
+        · En INBOX             → TU DOMINIO ES SUPLANTABLE — aplica hardening ❌
+
+    ⚠ El envío AUTOMATIZADO de la herramienta (drill) solo admite buzones del
+      dominio analizado. Esta inyección manual la ejecutas tú, contra un buzón
+      que controlas — no lo dirijas nunca a terceros.
     """)
 
 
