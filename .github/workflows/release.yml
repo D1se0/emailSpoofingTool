@@ -1,0 +1,58 @@
+name: Create GitHub Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release (e.g. v1.0.0)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Determine tag
+        id: tag
+        run: echo "TAG=${GITHUB_REF_NAME:-${{ github.event.inputs.tag }}}" >> $GITHUB_OUTPUT
+
+      - name: Build portable tarball
+        run: |
+          VERSION="${{ steps.tag.outputs.TAG }}"
+          git archive --format=tar.gz --prefix="emailSpoofingTool-${VERSION}/" \
+            -o "emailSpoofingTool-${VERSION}.tar.gz" HEAD
+          git archive --format=zip --prefix="emailSpoofingTool-${VERSION}/" \
+            -o "emailSpoofingTool-${VERSION}.zip" HEAD
+          sha256sum emailSpoofingTool-${VERSION}.* > SHA256SUMS.txt
+
+      - name: Extract release notes
+        run: |
+          if [ -f .github/RELEASE_NOTES_v1.0.0.md ]; then
+            cp .github/RELEASE_NOTES_v1.0.0.md body.md
+          else
+            echo "## MailForge ${{ steps.tag.outputs.TAG }}" > body.md
+            echo "See CHANGELOG and README for details." >> body.md
+          fi
+          echo "" >> body.md
+          echo "### Checksums (SHA256)" >> body.md
+          echo '```' >> body.md
+          cat SHA256SUMS.txt >> body.md
+          echo '```' >> body.md
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.TAG }}
+          name: MailForge ${{ steps.tag.outputs.TAG }}
+          body_path: body.md
+          files: |
+            emailSpoofingTool-*.tar.gz
+            emailSpoofingTool-*.zip
+            SHA256SUMS.txt
+          generate_release_notes: true
