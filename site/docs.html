@@ -5,84 +5,146 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Documentación exhaustiva — MailForge</title>
   <meta name="description" content="Manual completo de MailForge: cada comando, cada flag y cada opción con ejemplos detallados de sintaxis y pruebas con datos ficticios." />
-  <meta name="theme-color" content="#070a13" />
+  <meta name="theme-color" content="#0a0d14" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>🛡</text></svg>" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
   <style>
-    :root{--bg:#070a13;--panel:rgba(18,23,38,.72);--line:rgba(120,140,255,.14);--line-strong:rgba(120,140,255,.3);
-      --text:#e7eaf3;--muted:#8b93a7;--accent:#6c8cff;--accent2:#9a6cff;--accent3:#4dd8ff;--good:#5be49b;
-      --warn:#ffd24d;--bad:#ff5c7a;--font:"Inter",system-ui,sans-serif;--mono:"JetBrains Mono",ui-monospace,Menlo,monospace}
-    *{box-sizing:border-box;margin:0;padding:0}
+    :root{
+      --bg:#0a0d14;--bg-elevated:#0d111a;--text:#e8ecf4;--text-dim:#9aa4b8;--text-faint:#5c6478;
+      --border:rgba(255,255,255,.08);--border-strong:rgba(255,255,255,.14);
+      --glass:rgba(255,255,255,.04);--glass-hover:rgba(255,255,255,.07);
+      --cyan:#37e6c4;--violet:#7c5cff;--gradient:linear-gradient(135deg,var(--cyan),var(--violet));
+      --amber:#ffb454;--red:#ff5c78;--blue:#4fb0ff;
+      --radius:16px;--radius-sm:10px;
+      --font-sans:"Inter",-apple-system,"Segoe UI",system-ui,sans-serif;
+      --font-mono:"JetBrains Mono",ui-monospace,"Cascadia Code",monospace;
+      --maxw:1180px;
+      /* aliases de compatibilidad con estilos inline del contenido */
+      --accent:var(--cyan);--accent2:var(--violet);--accent3:var(--cyan);
+      --muted:var(--text-dim);--line:var(--border);--line-strong:var(--border-strong);
+      --panel:var(--glass);--good:var(--cyan);--warn:var(--amber);--bad:var(--red);
+      --font:var(--font-sans);--mono:var(--font-mono);--bg-old:#070a13;
+    }
+    *{box-sizing:border-box}
     html{scroll-behavior:smooth}
-    body{background:var(--bg);color:var(--text);font-family:var(--font);line-height:1.65;-webkit-font-smoothing:antialiased}
-    .aurora{position:fixed;inset:0;z-index:-2;background:
-      radial-gradient(ellipse 80% 50% at 20% -10%,rgba(108,140,255,.18),transparent),
-      radial-gradient(ellipse 60% 40% at 85% 10%,rgba(154,108,255,.14),transparent),var(--bg)}
+    body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font-sans);line-height:1.65;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+    body::before{content:"";position:fixed;inset:0;z-index:-2;pointer-events:none;background:
+      radial-gradient(60vw 40vw at 15% -10%,rgba(124,92,255,.20),transparent 60%),
+      radial-gradient(50vw 35vw at 100% 8%,rgba(55,230,196,.11),transparent 60%),
+      radial-gradient(40vw 30vw at 50% 100%,rgba(124,92,255,.10),transparent 60%)}
+    body::after{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;background-image:
+      linear-gradient(rgba(255,255,255,.025) 1px,transparent 1px),
+      linear-gradient(90deg,rgba(255,255,255,.025) 1px,transparent 1px);
+      background-size:44px 44px;
+      mask-image:radial-gradient(ellipse 75% 45% at 50% 0%,#000 20%,transparent 70%);
+      -webkit-mask-image:radial-gradient(ellipse 75% 45% at 50% 0%,#000 20%,transparent 70%)}
+    ::selection{background:rgba(55,230,196,.28)}
+    a{color:inherit;text-decoration:none}
+    :focus-visible{outline:2px solid var(--cyan);outline-offset:3px;border-radius:4px}
     .container{max-width:1240px;margin:0 auto;padding:0 24px}
-    nav{position:sticky;top:0;z-index:50;backdrop-filter:blur(18px);background:rgba(7,10,19,.78);border-bottom:1px solid var(--line)}
-    .nav-inner{display:flex;align-items:center;gap:22px;height:60px}
-    .brand{display:flex;align-items:center;gap:9px;font-weight:800;font-size:1.1rem;text-decoration:none;color:var(--text)}
-    .brand em{font-style:normal;background:linear-gradient(90deg,var(--accent),var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent}
-    .nav-links{margin-left:auto;display:flex;gap:14px;align-items:center}
-    .nav-links a{color:var(--muted);text-decoration:none;font-size:.9rem;font-weight:600}
+
+    /* nav estilo wraith */
+    .nav{position:fixed;top:0;left:0;right:0;z-index:50;border-bottom:1px solid transparent;transition:background .25s ease,border-color .25s ease,backdrop-filter .25s ease}
+    .nav.scrolled{background:rgba(10,13,20,.74);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border-bottom-color:var(--border)}
+    .nav-inner{max-width:1240px;margin:0 auto;padding:0 24px;height:68px;display:flex;align-items:center;justify-content:space-between;gap:18px}
+    .brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:17px;letter-spacing:-.01em;color:var(--text)}
+    .brand-mark{width:30px;height:30px;border-radius:9px;background:var(--gradient);display:grid;place-items:center;font-size:15px;box-shadow:0 4px 18px -4px rgba(55,230,196,.6);flex:0 0 auto}
+    .nav-links{display:flex;gap:24px;align-items:center;font-size:14.5px;font-weight:500;color:var(--text-dim)}
+    .nav-links a{transition:color .15s ease}
     .nav-links a:hover{color:var(--text)}
-    .layout{display:grid;grid-template-columns:250px minmax(0,1fr);gap:38px;padding:38px 0 80px}
-    .toc{position:sticky;top:80px;align-self:start;max-height:calc(100vh - 100px);overflow-y:auto;padding-right:6px}
-    .toc .grp{color:var(--muted);font-size:.72rem;text-transform:uppercase;letter-spacing:1px;font-weight:800;margin:18px 0 6px}
-    .toc .grp:first-child{margin-top:0}
-    .toc a{display:block;color:var(--muted);text-decoration:none;font-size:.86rem;padding:5px 11px;border-left:2px solid transparent;border-radius:0 8px 8px 0;transition:.15s}
-    .toc a:hover{color:var(--text);background:rgba(120,140,255,.07)}
-    .toc a.act{color:var(--accent3);border-left-color:var(--accent3)}
-    .docs h1{font-size:2.1rem;letter-spacing:-.6px;margin-bottom:8px}
-    .docs .meta{color:var(--muted);font-size:.9rem;margin-bottom:34px}
-    .docs h2{font-size:1.5rem;margin:52px 0 12px;scroll-margin-top:82px;padding-top:14px;border-top:1px solid var(--line)}
-    .docs h2:first-of-type{border-top:none;padding-top:0;margin-top:26px}
-    .docs h3{font-size:1.1rem;margin:26px 0 8px}
-    .docs h4{font-size:.98rem;margin:18px 0 6px;color:var(--accent3)}
-    .docs p,.docs li{color:var(--muted);font-size:.94rem;line-height:1.72}
+    .nav-links a.here{color:var(--cyan)}
+    .nav-actions{display:flex;gap:10px;align-items:center}
+    .btn{display:inline-flex;align-items:center;gap:8px;padding:9px 16px;border-radius:999px;font-size:13.5px;font-weight:600;font-family:var(--font-sans);border:1px solid var(--border-strong);cursor:pointer;white-space:nowrap;transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease,background .18s ease}
+    .btn:hover{transform:translateY(-1px)}
+    .btn-primary{background:var(--gradient);color:#06110e;border:none;box-shadow:0 8px 30px -8px rgba(55,230,196,.55)}
+    .btn-ghost{background:var(--glass);color:var(--text)}
+    .btn-ghost:hover{background:var(--glass-hover);border-color:var(--border-strong)}
+
+    /* layout docs */
+    .layout{display:grid;grid-template-columns:250px minmax(0,1fr);gap:40px;padding:110px 0 80px}
+    .toc{position:sticky;top:96px;align-self:start;max-height:calc(100vh - 120px);overflow-y:auto;padding:14px 10px 14px 6px;border:1px solid var(--border);border-radius:var(--radius);background:var(--glass);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.14) transparent}
+    .toc .grp{color:var(--text-faint);font-size:.7rem;text-transform:uppercase;letter-spacing:1px;font-weight:800;margin:18px 8px 6px}
+    .toc .grp:first-child{margin-top:2px}
+    .toc a{display:block;color:var(--text-dim);text-decoration:none;font-size:.855rem;padding:5px 11px;border-left:2px solid transparent;border-radius:0 8px 8px 0;transition:all .15s ease}
+    .toc a:hover{color:var(--text);background:var(--glass-hover)}
+    .toc a.act{color:var(--cyan);border-left-color:var(--cyan);background:rgba(55,230,196,.06)}
+
+    /* contenido */
+    .docs h1{font-size:clamp(30px,4vw,40px);letter-spacing:-.02em;margin:0 0 8px}
+    .docs .meta{color:var(--text-faint);font-size:.9rem;margin-bottom:36px}
+    .docs .meta b{color:var(--cyan)}
+    .docs h2{font-size:1.55rem;margin:56px 0 14px;scroll-margin-top:96px;padding-top:20px;border-top:1px solid var(--border);letter-spacing:-.01em}
+    .docs h2:first-of-type{border-top:none;padding-top:0;margin-top:28px}
+    .docs h3{font-size:1.12rem;margin:26px 0 8px}
+    .docs h4{font-size:.98rem;margin:18px 0 6px;color:var(--cyan)}
+    .docs p,.docs li{color:var(--text-dim);font-size:.95rem;line-height:1.75}
+    .docs b{color:var(--text)}
     .docs ul,.docs ol{padding-left:22px;margin:9px 0}
-    .docs li{margin:5px 0}
-    code{font-family:var(--mono);font-size:.845em;background:rgba(108,140,255,.1);padding:2px 7px;border-radius:6px;color:var(--accent3)}
-    pre{background:rgba(0,0,0,.5);border:1px solid var(--line);border-radius:12px;padding:17px 19px;overflow-x:auto;margin:13px 0;font-size:.815rem;line-height:1.62;font-family:var(--mono);color:#c9d4ff}
-    pre .c{color:#5f6a85}       /* comentario */
-    pre .p{color:#89ddff}       /* prompt/command */
-    pre .f{color:#c792ea}       /* flag */
-    pre .v{color:#5be49b}       /* valor ficticio */
-    pre .o{color:#ffd24d}       /* salida esperada */
-    table{width:100%;border-collapse:collapse;margin:14px 0;font-size:.88rem}
-    th,td{padding:9px 12px;border:1px solid var(--line);text-align:left;vertical-align:top}
-    th{background:rgba(120,140,255,.08);color:var(--text);font-weight:700;white-space:nowrap}
-    td{color:var(--muted)}
+    .docs li{margin:6px 0}
+    .docs ol li::marker{color:var(--cyan);font-weight:700}
+    code{font-family:var(--font-mono);font-size:.845em;background:rgba(0,0,0,.35);border:1px solid var(--border);padding:2px 8px;border-radius:6px;color:var(--cyan)}
+    pre{background:rgba(0,0,0,.38);border:1px solid var(--border);border-radius:var(--radius-sm);padding:17px 19px;overflow-x:auto;margin:14px 0;font-size:.815rem;line-height:1.68;font-family:var(--font-mono);color:#c9d4ff}
+    pre .c{color:var(--text-faint)}   /* comentario */
+    pre .p{color:var(--cyan)}         /* prompt/command */
+    pre .f{color:var(--violet)}       /* flag */
+    pre .v{color:var(--cyan)}         /* valor ficticio */
+    pre .o{color:var(--amber)}        /* salida esperada */
+    table{width:100%;border-collapse:collapse;margin:16px 0;font-size:.88rem}
+    th,td{padding:10px 14px;border:1px solid var(--border);text-align:left;vertical-align:top}
+    th{background:var(--glass);color:var(--text);font-weight:700;white-space:nowrap}
+    td{color:var(--text-dim)}
     td code{white-space:nowrap}
-    .warnbox{border:1px solid rgba(255,210,77,.4);background:rgba(255,210,77,.07);border-radius:12px;padding:14px 18px;margin:15px 0;color:var(--warn);font-size:.92rem}
-    .dangerbox{border:1px solid rgba(255,92,122,.45);background:rgba(255,92,122,.07);border-radius:12px;padding:14px 18px;margin:15px 0;color:var(--bad);font-size:.92rem;line-height:1.65}
+    tbody tr{transition:background .15s ease}
+    tbody tr:hover{background:var(--glass)}
+    .warnbox{border:1px solid rgba(255,180,84,.35);background:rgba(255,180,84,.08);border-radius:var(--radius-sm);padding:14px 18px;margin:16px 0;color:var(--text-dim);font-size:.92rem;line-height:1.68}
+    .warnbox b{color:var(--amber)}
+    .dangerbox{border:1px solid rgba(255,92,120,.4);background:rgba(255,92,120,.08);border-radius:var(--radius-sm);padding:14px 18px;margin:16px 0;color:var(--text-dim);font-size:.92rem;line-height:1.68}
+    .dangerbox b{color:var(--red)}
+    .tipbox{border:1px solid rgba(55,230,196,.32);background:rgba(55,230,196,.07);border-radius:var(--radius-sm);padding:14px 18px;margin:16px 0;color:var(--text-dim);font-size:.92rem;line-height:1.68}
+    .tipbox b{color:var(--cyan)}
     .tag{display:inline-block;font-size:.62rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
          padding:2px 8px;border-radius:20px;margin-left:8px;vertical-align:2px;
-         background:rgba(108,140,255,.15);color:var(--accent);border:1px solid rgba(108,140,255,.3)}
-    .c{color:#8b93a7}   /* comentario en bloques de código */
-    .o{color:#5be49b}   /* salida destacada */
-    .tipbox{border:1px solid rgba(91,228,155,.4);background:rgba(91,228,155,.06);border-radius:12px;padding:14px 18px;margin:15px 0;color:var(--good);font-size:.92rem}
-    .pill{display:inline-block;padding:2px 10px;border-radius:999px;font-size:.72rem;font-weight:750;margin-left:6px}
-    .pill.yes{background:rgba(91,228,155,.14);color:var(--good)}
-    .pill.no{background:rgba(255,92,122,.14);color:var(--bad)}
-    .pill.mid{background:rgba(255,210,77,.15);color:var(--warn)}
+         background:rgba(55,230,196,.1);color:var(--cyan);border:1px solid rgba(55,230,196,.3)}
+    .c{color:var(--text-faint)}   /* comentario en bloques de código */
+    .o{color:var(--cyan)}         /* salida destacada */
+    .pill{display:inline-block;padding:2px 11px;border-radius:999px;font-size:.72rem;font-weight:700;margin-left:6px;border:1px solid transparent}
+    .pill.yes{background:rgba(55,230,196,.12);border-color:rgba(55,230,196,.35);color:var(--cyan)}
+    .pill.no{background:rgba(255,92,120,.12);border-color:rgba(255,92,120,.35);color:var(--red)}
+    .pill.mid{background:rgba(255,180,84,.12);border-color:rgba(255,180,84,.35);color:var(--amber)}
     .steps{counter-reset:st;list-style:none;padding-left:0}
-    .steps li{counter-increment:st;position:relative;padding-left:44px;margin:13px 0}
+    .steps li{counter-increment:st;position:relative;padding-left:46px;margin:14px 0}
     .steps li::before{content:counter(st);position:absolute;left:0;top:1px;width:28px;height:28px;border-radius:9px;
-      background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;font-weight:800;display:grid;place-items:center;font-size:.85rem}
-    footer{border-top:1px solid var(--line);padding:32px 0;color:var(--muted);font-size:.85rem}
-    @media(max-width:920px){.layout{grid-template-columns:1fr}.toc{position:static;max-height:none;display:none}}
+      background:var(--gradient);color:#06110e;font-weight:800;display:grid;place-items:center;font-size:.85rem;box-shadow:0 4px 14px -4px rgba(124,92,255,.55)}
+
+    /* footer */
+    footer{border-top:1px solid var(--border);padding:40px 0;color:var(--text-faint);font-size:.85rem}
+    .foot-flex{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}
+    .foot-flex a{color:var(--cyan);transition:opacity .15s ease}
+    .foot-flex a:hover{opacity:.8}
+
+    /* reveal */
+    .reveal{opacity:0;transform:translateY(16px);transition:opacity .55s ease,transform .55s ease}
+    .reveal.in{opacity:1;transform:none}
+    @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*::before,*::after{animation-duration:.001s!important;transition-duration:.001s!important}.reveal{opacity:1;transform:none}}
+    @media(max-width:920px){.layout{grid-template-columns:1fr}.toc{display:none}.nav-links{display:none}}
+    @media(max-width:720px){.layout{padding-top:96px}.container{padding:0 18px}.nav-actions .btn-primary{display:none}}
   </style>
 </head>
 <body>
-  <div class="aurora"></div>
-
-  <nav>
-    <div class="container nav-inner">
-      <a class="brand" href="index.html">🛡 Mail<em>Forge</em></a>
+  <nav class="nav" id="nav">
+    <div class="nav-inner">
+      <a class="brand" href="index.html"><span class="brand-mark">🛡</span>MailForge</a>
       <div class="nav-links">
         <a href="index.html">Inicio</a>
-        <a href="docs.html" style="color:var(--text)">Documentación</a>
-        <a href="https://github.com/D1se0/emailSpoofingTool">GitHub ↗</a>
+        <a href="docs.html" class="here">Documentación</a>
+        <a href="index.html#caracteristicas">Características</a>
+        <a href="index.html#instalacion">Instalación</a>
+        <a href="https://github.com/D1se0/emailSpoofingTool" target="_blank" rel="noreferrer">GitHub ↗</a>
+      </div>
+      <div class="nav-actions">
+        <a class="btn btn-primary" href="index.html#instalacion">⬇ Descargar</a>
       </div>
     </div>
   </nav>
@@ -769,9 +831,23 @@ $ curl -s -X POST localhost:8787/api/spooflab/check -H 'Content-Type: applicatio
     </main>
   </div>
 
-  <footer><div class="container">🛡 MailForge v1.3.0 · MIT · <a href="https://github.com/D1se0/emailSpoofingTool" style="color:var(--accent3)">GitHub</a> · <a href="index.html" style="color:var(--accent3)">Inicio</a></div></footer>
+  <footer>
+    <div class="container foot-flex">
+      <div>🛡 <b style="color:var(--text)">MailForge</b> v1.3.0 · MIT</div>
+      <div style="display:flex;gap:22px">
+        <a href="https://github.com/D1se0/emailSpoofingTool" target="_blank" rel="noreferrer">GitHub</a>
+        <a href="https://github.com/D1se0/emailSpoofingTool/releases" target="_blank" rel="noreferrer">Releases</a>
+        <a href="index.html">Inicio</a>
+      </div>
+    </div>
+  </footer>
 
   <script>
+    // nav: solid on scroll
+    const nav = document.getElementById('nav');
+    const navScrolled = () => nav.classList.toggle('scrolled', window.scrollY > 8);
+    addEventListener('scroll', navScrolled, { passive: true }); navScrolled();
+
     // active TOC on scroll
     const links = [...document.querySelectorAll('.toc a')];
     const secs = links.map(a => document.querySelector(a.getAttribute('href'))).filter(Boolean);
@@ -781,6 +857,19 @@ $ curl -s -X POST localhost:8787/api/spooflab/check -H 'Content-Type: applicatio
       links.forEach(a => a.classList.toggle('act', a.getAttribute('href') === '#' + (cur && cur.id)));
     };
     addEventListener('scroll', onScroll, { passive: true }); onScroll();
+
+    // reveal on scroll (staggered)
+    const revealEls = [...document.querySelectorAll('main.docs > *')];
+    revealEls.forEach(el => el.classList.add('reveal'));
+    const io = new IntersectionObserver(entries => {
+      entries.forEach(e => {
+        if (e.isIntersecting) {
+          e.target.classList.add('in');
+          io.unobserve(e.target);
+        }
+      });
+    }, { threshold: 0.06, rootMargin: '0px 0px -40px 0px' });
+    revealEls.forEach(el => io.observe(el));
   </script>
 </body>
 </html>
